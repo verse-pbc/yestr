@@ -23,7 +23,7 @@ A Tinder-like profile discovery app for Nostr, built with Flutter.
 
 1. Clone the repository
 ```bash
-git clone https://github.com/YOUR_USERNAME/yestr.git
+git clone https://github.com/verse-pbc/yestr.git
 cd yestr
 ```
 
