@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_svg/flutter_svg.dart';
+import 'package:bech32/bech32.dart';
+import 'dart:typed_data';
+import 'dart:async';
+import 'dart:convert';
+import 'package:convert/convert.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/follow_service.dart';
@@ -22,6 +28,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final FollowService _followService = FollowService();
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -35,13 +42,53 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     try {
       await _nostrService.connect();
       
+      // Special profile to insert at position 10
+      const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
+      print('Special profile pubkey: $specialPubkey');
+      
       // Listen for profiles
       _nostrService.profilesStream.listen((profile) {
-        if (mounted && _profiles.length < 50) {
+        if (mounted) {
           setState(() {
-            _profiles.add(profile);
-            if (_profiles.length >= 50) {
-              _isLoading = false;
+            // Check if this is an update for the special profile
+            if (profile.pubkey == specialPubkey) {
+              // Find and update the special profile if it's already in the list
+              final index = _profiles.indexWhere((p) => p.pubkey == specialPubkey);
+              if (index != -1) {
+                _profiles[index] = profile;
+                print('Updated special profile with real data: ${profile.displayNameOrName}');
+                return;
+              }
+            }
+            
+            // Insert special profile at position 9 (10th card, 0-indexed)
+            if (_profiles.length == 9) {
+              print('Inserting special profile at position 10');
+              // Create a basic profile with the special pubkey
+              final specialProfile = NostrProfile(
+                pubkey: specialPubkey,
+                name: 'Special Profile',
+                displayName: 'Special Profile',
+                about: 'Loading profile...',
+                picture: null,
+                banner: null,
+                nip05: null,
+                lud16: null,
+                website: null,
+                createdAt: DateTime.now(),
+              );
+              _profiles.add(specialProfile);
+              
+              // Send a specific request for this profile
+              _requestSpecificProfile(specialPubkey);
+            }
+            
+            // Add regular profiles
+            if (_profiles.length < 50) {
+              _profiles.add(profile);
+              if (_profiles.length >= 50) {
+                _isLoading = false;
+              }
             }
           });
         }
@@ -62,6 +109,147 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
           _isLoading = false;
         });
       }
+    }
+  }
+
+  String? _npubToHex(String npub) {
+    try {
+      final decoded = bech32.decode(npub);
+      final data = convertBits(decoded.data, 5, 8, false);
+      final hexKey = hex.encode(data);
+      print('Decoded npub: $npub to hex: $hexKey');
+      return hexKey;
+    } catch (e) {
+      print('Error decoding npub: $e');
+      return null;
+    }
+  }
+
+  List<int> convertBits(List<int> data, int from, int to, bool pad) {
+    var acc = 0;
+    var bits = 0;
+    final result = <int>[];
+    for (final value in data) {
+      acc = (acc << from) | value;
+      bits += from;
+      while (bits >= to) {
+        bits -= to;
+        result.add((acc >> bits) & ((1 << to) - 1));
+      }
+    }
+    if (pad && bits > 0) {
+      result.add((acc << (to - bits)) & ((1 << to) - 1));
+    }
+    return result;
+  }
+
+  void _requestSpecificProfile(String pubkey) async {
+    print('Requesting specific profile for pubkey: $pubkey');
+    
+    // Try to fetch profile from multiple relays directly
+    try {
+      final profile = await _fetchProfileFromRelays(pubkey);
+      if (profile != null && mounted) {
+        print('Successfully fetched profile: ${profile.displayNameOrName}');
+        setState(() {
+          final index = _profiles.indexWhere((p) => p.pubkey == pubkey);
+          if (index != -1) {
+            _profiles[index] = profile;
+            print('Updated special profile at index $index');
+          }
+        });
+      }
+    } catch (e) {
+      print('Error fetching specific profile: $e');
+    }
+  }
+
+  Future<NostrProfile?> _fetchProfileFromRelays(String pubkey) async {
+    // Use multiple popular relays
+    final relays = [
+      'wss://relay.damus.io',
+      'wss://relay.primal.net',
+      'wss://nos.lol',
+      'wss://relay.nostr.band',
+      'wss://relay.yestr.social',
+    ];
+    
+    for (final relay in relays) {
+      try {
+        print('Trying to fetch profile from $relay');
+        final profile = await _fetchProfileFromRelay(relay, pubkey);
+        if (profile != null) {
+          return profile;
+        }
+      } catch (e) {
+        print('Failed to fetch from $relay: $e');
+      }
+    }
+    
+    return null;
+  }
+
+  Future<NostrProfile?> _fetchProfileFromRelay(String relayUrl, String pubkey) async {
+    final completer = Completer<NostrProfile?>();
+    final subscriptionId = 'profile_${DateTime.now().millisecondsSinceEpoch}';
+    
+    try {
+      final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
+      
+      // Send subscription request
+      final request = [
+        "REQ",
+        subscriptionId,
+        {
+          "kinds": [0],
+          "authors": [pubkey],
+          "limit": 1,
+        }
+      ];
+      
+      channel.sink.add(jsonEncode(request));
+      
+      // Set up timeout
+      final timer = Timer(const Duration(seconds: 3), () {
+        if (!completer.isCompleted) {
+          completer.complete(null);
+        }
+        channel.sink.close();
+      });
+      
+      // Listen for responses
+      channel.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message as String) as List<dynamic>;
+            if (data.length >= 3 && data[0] == 'EVENT' && data[1] == subscriptionId) {
+              final eventData = data[2] as Map<String, dynamic>;
+              if (eventData['kind'] == 0) {
+                final profile = NostrProfile.fromNostrEvent(eventData);
+                print('Fetched profile from $relayUrl: ${profile.displayNameOrName}');
+                print('Profile picture URL: ${profile.picture}');
+                if (!completer.isCompleted) {
+                  completer.complete(profile);
+                }
+                timer.cancel();
+                channel.sink.close();
+              }
+            }
+          } catch (e) {
+            print('Error parsing relay response: $e');
+          }
+        },
+        onError: (error) {
+          if (!completer.isCompleted) {
+            completer.complete(null);
+          }
+        },
+      );
+      
+      return await completer.future;
+    } catch (e) {
+      print('Error connecting to relay $relayUrl: $e');
+      return null;
     }
   }
 
@@ -243,24 +431,33 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                       'Left',
                                       Colors.red,
                                       'Nope',
-                                    ),
-                                    _buildIndicator(
-                                      Icons.person_add,
-                                      'Right',
-                                      Colors.green,
-                                      'Follow',
-                                    ),
-                                    _buildIndicator(
-                                      Icons.message,
-                                      'Up',
-                                      Colors.blue,
-                                      'Send DM',
+                                      () => controller.swipe(CardSwiperDirection.left),
                                     ),
                                     _buildIndicator(
                                       Icons.skip_next,
                                       'Down',
                                       Colors.yellow,
                                       'Skip',
+                                      () => controller.swipe(CardSwiperDirection.bottom),
+                                    ),
+                                    _buildIndicator(
+                                      Icons.message,
+                                      'Up',
+                                      Colors.blue,
+                                      'Send DM',
+                                      () {
+                                        // For Send DM, we need to get the current profile and show the composer
+                                        if (_profiles.isNotEmpty && _currentIndex < _profiles.length) {
+                                          _showMessageBottomSheet(context, _profiles[_currentIndex]);
+                                        }
+                                      },
+                                    ),
+                                    _buildIndicator(
+                                      Icons.person_add,
+                                      'Right',
+                                      Colors.green,
+                                      'Follow',
+                                      () => controller.swipe(CardSwiperDirection.right),
                                     ),
                                   ],
                                 ),
@@ -280,26 +477,44 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     String direction,
     Color color,
     String label,
+    VoidCallback onTap,
   ) {
-    return Column(
-      children: [
-        Icon(icon, color: color, size: 32),
-        const SizedBox(height: 4),
-        Text(
-          label,
-          style: TextStyle(
-            color: color,
-            fontWeight: FontWeight.bold,
-          ),
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.transparent,
         ),
-        Text(
-          direction,
-          style: const TextStyle(
-            fontSize: 12,
-            color: Colors.grey,
-          ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.1),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            Text(
+              direction,
+              style: const TextStyle(
+                fontSize: 12,
+                color: Colors.grey,
+              ),
+            ),
+          ],
         ),
-      ],
+      ),
     );
   }
 
@@ -309,6 +524,14 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     CardSwiperDirection direction,
   ) {
     final profile = _profiles[previousIndex];
+    
+    // Update current index
+    if (currentIndex != null) {
+      setState(() {
+        _currentIndex = currentIndex;
+      });
+    }
+    
     String action;
     switch (direction) {
       case CardSwiperDirection.left:
@@ -334,19 +557,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     
     print('$action on ${profile.displayNameOrName}');
     
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$action ${profile.displayNameOrName}'),
-        duration: const Duration(milliseconds: 500),
-        backgroundColor: direction == CardSwiperDirection.right
-            ? Colors.green
-            : direction == CardSwiperDirection.left
-                ? Colors.red
-                : direction == CardSwiperDirection.top
-                    ? Colors.blue
-                    : Colors.orange,
-      ),
-    );
+    // No snack bar messages for swipe actions
+    // Follow action (right swipe) has its own feedback in _handleFollow
     
     return true;
   }
@@ -356,6 +568,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     int currentIndex,
     CardSwiperDirection direction,
   ) {
+    setState(() {
+      _currentIndex = currentIndex;
+    });
     return true;
   }
 
