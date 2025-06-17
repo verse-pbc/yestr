@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
+import '../models/nostr_event.dart';
 
 class NostrService {
   static const String relayUrl = 'wss://relay.yestr.social';
@@ -118,5 +119,86 @@ class NostrService {
     _channel?.sink.close();
     _profilesController.close();
     _profiles.clear();
+  }
+
+  Future<List<NostrEvent>> getUserNotes(String pubkey, {int limit = 10}) async {
+    final completer = Completer<List<NostrEvent>>();
+    final notes = <NostrEvent>[];
+    final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+    
+    // Create a new WebSocket connection for this request
+    final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
+    
+    StreamSubscription? subscription;
+    Timer? timeout;
+    
+    void cleanup() {
+      subscription?.cancel();
+      timeout?.cancel();
+      final closeRequest = ["CLOSE", subscriptionId];
+      channel.sink.add(jsonEncode(closeRequest));
+      channel.sink.close();
+    }
+    
+    subscription = channel.stream.listen(
+      (message) {
+        try {
+          final data = jsonDecode(message as String) as List<dynamic>;
+          
+          if (data.length < 2) return;
+          
+          final type = data[0] as String;
+          
+          switch (type) {
+            case 'EVENT':
+              if (data.length >= 3) {
+                final eventData = data[2] as Map<String, dynamic>;
+                if (eventData['kind'] == 1) {
+                  final event = NostrEvent.fromJson(eventData);
+                  notes.add(event);
+                }
+              }
+              break;
+            case 'EOSE':
+              if (data[1] == subscriptionId) {
+                cleanup();
+                notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+                completer.complete(notes.take(limit).toList());
+              }
+              break;
+          }
+        } catch (e) {
+          print('Error handling user notes message: $e');
+        }
+      },
+      onError: (error) {
+        cleanup();
+        completer.completeError(error);
+      },
+    );
+    
+    // Set timeout
+    timeout = Timer(const Duration(seconds: 5), () {
+      cleanup();
+      if (!completer.isCompleted) {
+        notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+        completer.complete(notes.take(limit).toList());
+      }
+    });
+    
+    // Request notes from the user
+    final request = [
+      "REQ",
+      subscriptionId,
+      {
+        "kinds": [1],
+        "authors": [pubkey],
+        "limit": limit * 2, // Request more to ensure we get enough
+      }
+    ];
+    
+    channel.sink.add(jsonEncode(request));
+    
+    return completer.future;
   }
 }

@@ -1,13 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:share_plus/share_plus.dart';
 import '../../models/nostr_profile.dart';
+import '../../models/nostr_event.dart';
+import '../../services/nostr_service.dart';
+import '../../widgets/formatted_content.dart';
 
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
 
   const ProfileScreen({
     super.key,
     required this.profile,
   });
+
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
+  final NostrService _nostrService = NostrService();
+  Future<List<NostrEvent>>? _notesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _notesFuture = _nostrService.getUserNotes(widget.profile.pubkey, limit: 10);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,12 +42,12 @@ class ProfileScreen extends StatelessWidget {
               onPressed: () => Navigator.of(context).pop(),
             ),
             flexibleSpace: FlexibleSpaceBar(
-              title: Text(profile.displayNameOrName),
-              background: profile.picture != null
-                  ? Image.network(
-                      profile.picture!,
+              title: Text(widget.profile.displayNameOrName),
+              background: widget.profile.picture != null
+                  ? CachedNetworkImage(
+                      imageUrl: widget.profile.picture!,
                       fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) {
+                      errorWidget: (context, url, error) {
                         return Container(
                           color: Colors.grey[300],
                           child: const Center(
@@ -48,9 +67,7 @@ class ProfileScreen extends StatelessWidget {
               IconButton(
                 icon: const Icon(Icons.share),
                 onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Share feature coming soon!')),
-                  );
+                  _shareProfile();
                 },
               ),
             ],
@@ -62,14 +79,14 @@ class ProfileScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // NIP-05 Verification
-                  if (profile.nip05 != null && profile.nip05!.isNotEmpty) ...[
+                  if (widget.profile.nip05 != null && widget.profile.nip05!.isNotEmpty) ...[
                     Row(
                       children: [
                         const Icon(Icons.verified, color: Colors.blue),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            profile.nip05!,
+                            widget.profile.nip05!,
                             style: Theme.of(context).textTheme.bodyMedium,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -86,12 +103,12 @@ class ProfileScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    profile.about ?? 'No bio available',
+                    widget.profile.about ?? 'No bio available',
                     style: Theme.of(context).textTheme.bodyMedium,
                   ),
                   
                   // Website
-                  if (profile.website != null && profile.website!.isNotEmpty) ...[
+                  if (widget.profile.website != null && widget.profile.website!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -99,7 +116,7 @@ class ProfileScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            profile.website!,
+                            widget.profile.website!,
                             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                                   color: Theme.of(context).colorScheme.primary,
                                 ),
@@ -111,7 +128,7 @@ class ProfileScreen extends StatelessWidget {
                   ],
                   
                   // Lightning Address
-                  if (profile.lud16 != null && profile.lud16!.isNotEmpty) ...[
+                  if (widget.profile.lud16 != null && widget.profile.lud16!.isNotEmpty) ...[
                     const SizedBox(height: 16),
                     Row(
                       children: [
@@ -119,7 +136,7 @@ class ProfileScreen extends StatelessWidget {
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
-                            profile.lud16!,
+                            widget.profile.lud16!,
                             style: Theme.of(context).textTheme.bodyMedium,
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -128,31 +145,92 @@ class ProfileScreen extends StatelessWidget {
                     ),
                   ],
                   
-                  // Profile Info
+                  // Recent Posts Section
                   const SizedBox(height: 24),
-                  Card(
-                    child: Padding(
-                      padding: const EdgeInsets.all(16.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Profile Information',
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 16),
-                          _buildInfoRow('Public Key', _truncatePubkey(profile.pubkey)),
-                          const SizedBox(height: 8),
-                          if (profile.createdAt != null)
-                            _buildInfoRow(
-                              'Profile Created',
-                              _formatDate(profile.createdAt!),
-                            ),
-                        ],
-                      ),
+                  Text(
+                    'Recent Posts',
+                    style: Theme.of(context).textTheme.titleLarge,
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+          // Recent notes list
+          FutureBuilder<List<NostrEvent>>(
+            future: _notesFuture,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(
+                      child: CircularProgressIndicator(),
                     ),
                   ),
-                ],
+                );
+              }
+              
+              if (snapshot.hasError) {
+                return SliverToBoxAdapter(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Center(
+                      child: Text('Error loading posts: ${snapshot.error}'),
+                    ),
+                  ),
+                );
+              }
+              
+              final notes = snapshot.data ?? [];
+              
+              if (notes.isEmpty) {
+                return const SliverToBoxAdapter(
+                  child: Padding(
+                    padding: EdgeInsets.all(16.0),
+                    child: Center(
+                      child: Text('No posts available'),
+                    ),
+                  ),
+                );
+              }
+              
+              return SliverList(
+                delegate: SliverChildBuilderDelegate(
+                  (context, index) {
+                    final note = notes[index];
+                    return _buildNoteCard(note);
+                  },
+                  childCount: notes.length,
+                ),
+              );
+            },
+          ),
+          // Profile Info at the bottom
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Profile Information',
+                        style: Theme.of(context).textTheme.titleMedium,
+                      ),
+                      const SizedBox(height: 16),
+                      _buildInfoRow('Public Key', _truncatePubkey(widget.profile.pubkey)),
+                      const SizedBox(height: 8),
+                      if (widget.profile.createdAt != null)
+                        _buildInfoRow(
+                          'Profile Created',
+                          _formatDate(widget.profile.createdAt!),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ),
           ),
@@ -165,6 +243,80 @@ class ProfileScreen extends StatelessWidget {
           );
         },
         child: const Icon(Icons.message),
+      ),
+    );
+  }
+
+  Widget _buildNoteCard(NostrEvent note) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                CircleAvatar(
+                  backgroundImage: widget.profile.picture != null
+                      ? CachedNetworkImageProvider(widget.profile.picture!)
+                      : null,
+                  child: widget.profile.picture == null
+                      ? const Icon(Icons.person)
+                      : null,
+                  radius: 20,
+                ),
+                const SizedBox(width: 12),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.profile.displayNameOrName,
+                      style: Theme.of(context).textTheme.titleMedium,
+                    ),
+                    Text(
+                      _formatDate(note.createdDateTime),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            FormattedContent(
+              content: note.content,
+              textStyle: Theme.of(context).textTheme.bodyMedium,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.favorite_border),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Like feature coming soon!')),
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.repeat),
+                  onPressed: () {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('Repost feature coming soon!')),
+                    );
+                  },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.share),
+                  onPressed: () {
+                    _shareNote(note);
+                  },
+                ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -214,5 +366,19 @@ class ProfileScreen extends StatelessWidget {
       final years = (difference.inDays / 365).floor();
       return '${years}y ago';
     }
+  }
+
+  void _shareProfile() {
+    final text = '${widget.profile.displayNameOrName} on Nostr\n\n'
+        '${widget.profile.about ?? ''}\n\n'
+        'npub: ${widget.profile.pubkey}';
+    Share.share(text);
+  }
+
+  void _shareNote(NostrEvent note) {
+    final text = '${widget.profile.displayNameOrName} posted:\n\n'
+        '${note.content}\n\n'
+        'Posted ${_formatDate(note.createdDateTime)}';
+    Share.share(text);
   }
 }
