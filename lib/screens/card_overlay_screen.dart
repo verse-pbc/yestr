@@ -3,7 +3,10 @@ import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
+import '../services/follow_service.dart';
+import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
+import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
 
 class CardOverlayScreen extends StatefulWidget {
@@ -16,12 +19,15 @@ class CardOverlayScreen extends StatefulWidget {
 class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
+  final FollowService _followService = FollowService();
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
+    // Set main background when screen loads
+    WebBackgroundService.setMainBackground();
     _loadProfiles();
   }
 
@@ -69,12 +75,35 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: SvgPicture.asset(
-          'assets/images/yestr_logo.svg',
-          height: 40,
+      drawerScrimColor: Colors.black.withOpacity(0.6), // Dim background when drawer is open
+      drawer: AppDrawer(),
+      appBar: PreferredSize(
+        preferredSize: const Size.fromHeight(kToolbarHeight + 8),
+        child: AppBar(
+          leading: Builder(
+            builder: (context) => Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: IconButton(
+                icon: const Icon(Icons.menu, color: Colors.white, size: 30),
+                onPressed: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+          ),
+          title: Padding(
+            padding: const EdgeInsets.only(top: 8.0),
+            child: SvgPicture.asset(
+              'assets/images/yestr_logo.svg',
+              height: 40,
+            ),
+          ),
+          centerTitle: true,
+          toolbarHeight: kToolbarHeight + 8,
+          titleSpacing: 0,
+          bottom: PreferredSize(
+            preferredSize: const Size.fromHeight(0),
+            child: Container(),
+          ),
         ),
-        centerTitle: true,
       ),
       body: SafeArea(
         child: _isLoading
@@ -103,7 +132,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                               Stack(
                             children: [
                               ProfileCard(profile: _profiles[index]),
-                              // Like overlay
+                              // Follow overlay
                               if (horizontalThresholdPercentage > 50)
                                 Positioned.fill(
                                   child: Container(
@@ -115,7 +144,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                     child: Center(
                                       child: Icon(
-                                        Icons.favorite,
+                                        Icons.person_add,
                                         size: 100,
                                         color: Colors.white.withOpacity(
                                           ((horizontalThresholdPercentage - 50) / 50).clamp(0.0, 1.0),
@@ -145,7 +174,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                   ),
                                 ),
-                              // Super like overlay
+                              // Send DM overlay
                               if (verticalThresholdPercentage < -50)
                                 Positioned.fill(
                                   child: Container(
@@ -157,7 +186,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                     child: Center(
                                       child: Icon(
-                                        Icons.star,
+                                        Icons.message,
                                         size: 100,
                                         color: Colors.white.withOpacity(
                                           ((verticalThresholdPercentage.abs() - 50) / 50).clamp(0.0, 1.0),
@@ -216,16 +245,16 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                       'Nope',
                                     ),
                                     _buildIndicator(
-                                      Icons.favorite,
+                                      Icons.person_add,
                                       'Right',
                                       Colors.green,
-                                      'Like',
+                                      'Follow',
                                     ),
                                     _buildIndicator(
-                                      Icons.star,
+                                      Icons.message,
                                       'Up',
                                       Colors.blue,
-                                      'Super Like',
+                                      'Send DM',
                                     ),
                                     _buildIndicator(
                                       Icons.skip_next,
@@ -286,7 +315,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         action = 'Nope';
         break;
       case CardSwiperDirection.right:
-        action = 'Like';
+        action = 'Follow';
+        // Handle follow action
+        _handleFollow(profile);
         break;
       case CardSwiperDirection.top:
         action = 'Send DM';
@@ -358,5 +389,36 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         );
       },
     );
+  }
+
+  Future<void> _handleFollow(NostrProfile profile) async {
+    try {
+      final success = await _followService.followProfile(profile.pubkey);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Following ${profile.displayNameOrName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Follow failed. Please login to follow users.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error following user: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 }
