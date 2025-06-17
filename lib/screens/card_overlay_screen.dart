@@ -165,6 +165,27 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                   ),
                                 ),
+                              // Skip overlay
+                              if (verticalThresholdPercentage > 50)
+                                Positioned.fill(
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      borderRadius: BorderRadius.circular(20),
+                                      color: Colors.yellow.withOpacity(
+                                        ((verticalThresholdPercentage - 50) / 50 * 0.5).clamp(0.0, 0.5),
+                                      ),
+                                    ),
+                                    child: Center(
+                                      child: Icon(
+                                        Icons.skip_next,
+                                        size: 100,
+                                        color: Colors.white.withOpacity(
+                                          ((verticalThresholdPercentage - 50) / 50).clamp(0.0, 1.0),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
                             ],
                           ),
                         ),
@@ -177,7 +198,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                             child: Column(
                               children: [
                                 const Text(
-                                  'Swipe Direction Indicators',
+                                  'Swipe Actions',
                                   style: TextStyle(
                                     fontSize: 18,
                                     fontWeight: FontWeight.bold,
@@ -204,6 +225,12 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                       'Up',
                                       Colors.blue,
                                       'Super Like',
+                                    ),
+                                    _buildIndicator(
+                                      Icons.skip_next,
+                                      'Down',
+                                      Colors.yellow,
+                                      'Skip',
                                     ),
                                   ],
                                 ),
