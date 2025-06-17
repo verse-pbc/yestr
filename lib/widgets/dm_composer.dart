@@ -36,23 +36,32 @@ class _DirectMessageComposerState extends State<DirectMessageComposer> {
   }
 
   Future<void> _sendMessage() async {
+    print('[DM Composer] Send button pressed');
     final message = _messageController.text.trim();
-    if (message.isEmpty) return;
+    if (message.isEmpty) {
+      print('[DM Composer] Message is empty, returning');
+      return;
+    }
 
+    print('[DM Composer] Sending message: "$message" to ${widget.recipient.displayNameOrName}');
     setState(() {
       _isSending = true;
     });
 
     try {
       // Check if user is logged in
+      print('[DM Composer] Checking if user is logged in...');
       final isLoggedIn = await _keyManagementService.hasPrivateKey();
+      print('[DM Composer] User logged in: $isLoggedIn');
       
       if (!isLoggedIn) {
         throw Exception('You need to be logged in to send messages');
       }
       
       // Send the encrypted message
+      print('[DM Composer] Calling sendDirectMessage...');
       final success = await _dmService.sendDirectMessage(message, widget.recipient);
+      print('[DM Composer] Send result: $success');
       
       if (!success) {
         throw Exception('Failed to send message to any relay');
@@ -74,6 +83,7 @@ class _DirectMessageComposerState extends State<DirectMessageComposer> {
       // Call the callback
       widget.onMessageSent?.call();
     } catch (e) {
+      print('[DM Composer] Error sending message: $e');
       // Show error feedback
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

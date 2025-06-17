@@ -27,6 +27,7 @@ class CorsHelper {
       's3.solarcom.ch',
       'media.misskeyusercontent.com',
       'r2.primal.net', // Add primal.net cache
+      'nostr.build', // Add nostr.build for image hosting
     ];
     
     try {

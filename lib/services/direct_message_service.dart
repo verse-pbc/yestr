@@ -1,13 +1,15 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
+import 'dart:async';
 import 'package:pointycastle/export.dart';
-import 'package:pointycastle/ecc/api.dart';
-import 'package:pointycastle/ecc/curves/secp256k1.dart';
 import 'package:crypto/crypto.dart';
+import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../models/nostr_event.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
+import 'event_signer.dart';
 import 'package:convert/convert.dart';
 
 class DirectMessageService {
@@ -18,44 +20,82 @@ class DirectMessageService {
 
   /// Send a direct message to a recipient using NIP-04 encryption
   Future<bool> sendDirectMessage(String content, NostrProfile recipient) async {
+    print('[DM Service] Starting sendDirectMessage...');
+    print('[DM Service] Content: "$content"');
+    print('[DM Service] Recipient: ${recipient.displayNameOrName} (${recipient.pubkey})');
+    
     try {
       // Check if user is logged in
+      print('[DM Service] Checking login status...');
       final hasPrivateKey = await _keyManagementService.hasPrivateKey();
+      print('[DM Service] Has private key: $hasPrivateKey');
       if (!hasPrivateKey) {
         throw Exception('You must be logged in to send messages');
       }
 
       // Get sender's keys
+      print('[DM Service] Getting sender keys...');
       final privateKey = await _keyManagementService.getPrivateKey();
       final publicKey = await _keyManagementService.getPublicKey();
+      print('[DM Service] Private key: ${privateKey != null ? 'Present' : 'NULL'}');
+      print('[DM Service] Public key: ${publicKey != null ? publicKey : 'NULL'}');
       if (privateKey == null || publicKey == null) {
         throw Exception('Unable to get sender keys');
       }
 
       // Encrypt the message content using NIP-04
+      print('[DM Service] Encrypting message...');
       final encryptedContent = await _encryptMessage(content, privateKey, recipient.pubkey);
+      print('[DM Service] Encrypted content: ${encryptedContent.substring(0, 50)}...');
 
       // Create tags for the direct message
       final List<List<String>> tags = [
         ['p', recipient.pubkey],
       ];
 
-      // Create event data with signature
-      final eventData = await _createSignedEvent(
-        publicKey: publicKey,
-        privateKey: privateKey,
+      // Create event data with signature using EventSigner
+      print('[DM Service] Creating signed event...');
+      final eventData = EventSigner.createSignedEvent(
+        privateKeyHex: privateKey,
+        publicKeyHex: publicKey,
         kind: 4, // Kind 4 is for encrypted direct messages
         tags: tags,
         content: encryptedContent,
       );
+      print('[DM Service] Event created with ID: ${eventData['id']}');
 
-      // Publish the event
-      final results = await _nostrService.publishEvent(eventData);
-      final success = results.values.any((v) => v);
+      // Publish to multiple relays directly
+      final relays = [
+        'wss://relay.damus.io',
+        'wss://relay.primal.net',
+        'wss://nos.lol',
+        'wss://relay.nostr.band',
+        'wss://relay.yestr.social',
+      ];
+      
+      bool publishedToAnyRelay = false;
+      print('[DM Service] Publishing to ${relays.length} relays...');
+      
+      for (final relay in relays) {
+        try {
+          print('[DM Service] Publishing to $relay...');
+          final success = await _publishToRelay(relay, eventData);
+          if (success) {
+            publishedToAnyRelay = true;
+            print('[DM Service] ✓ Successfully published DM to $relay');
+          } else {
+            print('[DM Service] ✗ Failed to publish to $relay');
+          }
+        } catch (e) {
+          print('[DM Service] ✗ Error publishing to $relay: $e');
+        }
+      }
 
-      return success;
+      print('[DM Service] Published to any relay: $publishedToAnyRelay');
+      return publishedToAnyRelay;
     } catch (e) {
-      print('Error sending direct message: $e');
+      print('[DM Service] ERROR in sendDirectMessage: $e');
+      print('[DM Service] Stack trace: ${StackTrace.current}');
       return false;
     }
   }
@@ -72,10 +112,15 @@ class DirectMessageService {
 
       // Generate random IV
       final secureRandom = FortunaRandom();
-      final seedSource = Uint8List.fromList(
-        List.generate(32, (i) => DateTime.now().millisecondsSinceEpoch & 0xff),
-      );
-      secureRandom.seed(KeyParameter(seedSource));
+      
+      // Properly seed the random number generator
+      final seed = Uint8List(32);
+      final random = Random.secure();
+      for (int i = 0; i < seed.length; i++) {
+        seed[i] = random.nextInt(256);
+      }
+      
+      secureRandom.seed(KeyParameter(seed));
       final iv = secureRandom.nextBytes(16);
 
       // Encrypt the message
@@ -167,81 +212,64 @@ class DirectMessageService {
     return bytes;
   }
 
-  /// Create a signed Nostr event
-  Future<Map<String, dynamic>> _createSignedEvent({
-    required String publicKey,
-    required String privateKey,
-    required int kind,
-    required List<List<String>> tags,
-    required String content,
-  }) async {
-    final createdAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+  /// Publish event to a specific relay
+  Future<bool> _publishToRelay(String relayUrl, Map<String, dynamic> eventData) async {
+    print('[DM Service - Relay] Connecting to $relayUrl...');
+    final completer = Completer<bool>();
     
-    // Create event ID
-    final eventData = [
-      0,
-      publicKey,
-      createdAt,
-      kind,
-      tags,
-      content,
-    ];
-    
-    final serialized = jsonEncode(eventData);
-    final bytes = utf8.encode(serialized);
-    final hash = sha256.convert(bytes);
-    final id = hex.encode(hash.bytes);
-    
-    // Sign the event
-    final signature = await _signMessage(id, privateKey);
-    
-    return {
-      'id': id,
-      'pubkey': publicKey,
-      'created_at': createdAt,
-      'kind': kind,
-      'tags': tags,
-      'content': content,
-      'sig': signature,
-    };
-  }
-
-  /// Sign a message using secp256k1
-  Future<String> _signMessage(String message, String privateKey) async {
     try {
-      final privateKeyBytes = Uint8List.fromList(hex.decode(privateKey));
-      final messageBytes = Uint8List.fromList(hex.decode(message));
+      final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
       
-      // secp256k1 curve parameters
-      final curve = ECCurve_secp256k1();
-      final domainParams = ECDomainParametersImpl('secp256k1', curve.curve, curve.G, curve.n, curve.h, curve.seed);
+      // Send event
+      final message = ["EVENT", eventData];
+      final messageJson = jsonEncode(message);
+      print('[DM Service - Relay] Sending EVENT to $relayUrl');
+      print('[DM Service - Relay] Message: ${messageJson.substring(0, 100)}...');
+      channel.sink.add(messageJson);
       
-      // Create private key
-      final d = BigInt.parse(privateKey, radix: 16);
-      final privKey = ECPrivateKey(d, domainParams);
+      // Set up timeout
+      final timer = Timer(const Duration(seconds: 5), () {
+        print('[DM Service - Relay] Timeout waiting for response from $relayUrl');
+        if (!completer.isCompleted) {
+          completer.complete(false);
+        }
+        channel.sink.close();
+      });
       
-      // Sign the message
-      final signer = ECDSASigner(SHA256Digest());
-      signer.init(true, PrivateKeyParameter(privKey));
+      // Listen for OK response
+      channel.stream.listen(
+        (message) {
+          print('[DM Service - Relay] Received from $relayUrl: $message');
+          try {
+            final data = jsonDecode(message as String) as List<dynamic>;
+            if (data.length >= 3 && data[0] == 'OK' && data[1] == eventData['id']) {
+              final success = data[2] as bool;
+              print('[DM Service - Relay] Got OK response from $relayUrl: $success');
+              if (data.length >= 4) {
+                print('[DM Service - Relay] OK message: ${data[3]}');
+              }
+              if (!completer.isCompleted) {
+                completer.complete(success);
+              }
+              timer.cancel();
+              channel.sink.close();
+            }
+          } catch (e) {
+            print('[DM Service - Relay] Error parsing response from $relayUrl: $e');
+          }
+        },
+        onError: (error) {
+          print('[DM Service - Relay] Stream error from $relayUrl: $error');
+          if (!completer.isCompleted) {
+            completer.complete(false);
+          }
+        },
+      );
       
-      final signature = signer.generateSignature(messageBytes) as ECSignature;
-      
-      // Convert signature to DER format
-      final r = signature.r;
-      final s = signature.s;
-      
-      // Encode r and s as fixed 32-byte values and concatenate
-      final rBytes = _bigIntToBytes(r, 32);
-      final sBytes = _bigIntToBytes(s, 32);
-      
-      final sigBytes = Uint8List(64);
-      sigBytes.setAll(0, rBytes);
-      sigBytes.setAll(32, sBytes);
-      
-      return hex.encode(sigBytes);
+      return await completer.future;
     } catch (e) {
-      print('Error signing message: $e');
-      throw Exception('Failed to sign message: $e');
+      print('[DM Service - Relay] Error connecting to $relayUrl: $e');
+      return false;
     }
   }
 }

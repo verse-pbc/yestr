@@ -45,7 +45,8 @@ class ProfileCard extends StatelessWidget {
                       builder: (context) {
                         final imageUrl = CorsHelper.wrapWithCorsProxy(profile.picture!);
                         if (profile.displayNameOrName.toLowerCase().contains('airport') ||
-                            profile.displayNameOrName.toLowerCase().contains('observatory')) {
+                            profile.displayNameOrName.toLowerCase().contains('observatory') ||
+                            profile.displayNameOrName.toLowerCase().contains('sebastian')) {
                           print('Debug: Loading image for ${profile.displayNameOrName}');
                           print('Original URL: ${profile.picture}');
                           print('Processed URL: $imageUrl');
@@ -68,7 +69,8 @@ class ProfileCard extends StatelessWidget {
                           ),
                           errorWidget: (context, url, error) {
                             if (profile.displayNameOrName.toLowerCase().contains('airport') ||
-                                profile.displayNameOrName.toLowerCase().contains('observatory')) {
+                                profile.displayNameOrName.toLowerCase().contains('observatory') ||
+                                profile.displayNameOrName.toLowerCase().contains('sebastian')) {
                               print('ProfileCard image error for ${profile.displayNameOrName}: $error');
                               print('Failed URL: $url');
                               print('Error type: ${error.runtimeType}');

@@ -31,6 +31,43 @@
 
   <title>card_swiper_demo</title>
   <link rel="manifest" href="manifest.json">
+  
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      background-image: url('https://cdn.midjourney.com/7bc9a4f2-be36-4270-a4f9-2cd6260ef772/0_0.png');
+      background-size: cover;
+      background-position: center;
+      background-repeat: no-repeat;
+      background-attachment: fixed;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      transition: background-image 0.5s ease-in-out;
+    }
+    
+    /* Optional: Add a subtle overlay to ensure app visibility */
+    body::before {
+      content: '';
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background: rgba(0, 0, 0, 0.3);
+      pointer-events: none;
+      z-index: -1;
+    }
+  </style>
+  
+  <script>
+    // Function to change background image
+    function setBackgroundImage(imageUrl) {
+      document.body.style.backgroundImage = `url('${imageUrl}')`;
+    }
+  </script>
 </head>
 <body>
   <script src="flutter_bootstrap.js" async></script>

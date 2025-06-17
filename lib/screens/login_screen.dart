@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
+import '../services/web_background_service.dart';
 import 'card_overlay_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -15,6 +16,13 @@ class _LoginScreenState extends State<LoginScreen> {
   final KeyManagementService _keyService = KeyManagementService();
   bool _isProcessing = false;
   bool _isObscured = true;
+
+  @override
+  void initState() {
+    super.initState();
+    // Set login background when screen loads
+    WebBackgroundService.setLoginBackground();
+  }
 
   @override
   void dispose() {

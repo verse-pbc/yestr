@@ -2,6 +2,34 @@ import 'dart:typed_data';
 import 'package:bech32/bech32.dart';
 
 class NostrUtils {
+  /// Convert hex event ID to nevent format
+  static String hexToNevent(String hexEventId) {
+    try {
+      // Remove 0x prefix if present
+      if (hexEventId.startsWith('0x')) {
+        hexEventId = hexEventId.substring(2);
+      }
+      
+      // Convert hex to bytes
+      final bytes = _hexToBytes(hexEventId);
+      
+      // Convert to 5-bit groups for bech32
+      final fiveBitWords = _convertBits(bytes, 8, 5, true);
+      if (fiveBitWords == null) {
+        throw Exception('Failed to convert to 5-bit words');
+      }
+      
+      // Encode as bech32
+      final bech32Codec = Bech32Codec();
+      final bech32 = bech32Codec.encode(Bech32('nevent', fiveBitWords));
+      
+      return bech32;
+    } catch (e) {
+      // Fallback format if encoding fails
+      return 'nevent${hexEventId.substring(0, 8)}...${hexEventId.substring(hexEventId.length - 8)}';
+    }
+  }
+
   /// Convert hex public key to npub format
   static String hexToNpub(String hexPubkey) {
     try {

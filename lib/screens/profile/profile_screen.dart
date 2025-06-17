@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:share_plus/share_plus.dart';
 import '../../models/nostr_profile.dart';
 import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
+import '../../widgets/share_note_sheet.dart';
+import '../../widgets/dm_composer.dart';
 import '../../utils/cors_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -295,9 +296,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Direct message feature coming soon!')),
-          );
+          _showMessageBottomSheet(context);
         },
         child: const Icon(Icons.message),
       ),
@@ -434,9 +433,38 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _shareNote(NostrEvent note) {
-    final text = '${widget.profile.displayNameOrName} posted:\n\n'
-        '${note.content}\n\n'
-        'Posted ${_formatDate(note.createdDateTime)}';
-    Share.share(text);
+    ShareNoteSheet.show(context, note, widget.profile);
+  }
+
+  void _showMessageBottomSheet(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).canvasColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      // Use at least 60% of screen height and expand if keyboard is shown
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+        minHeight: MediaQuery.of(context).size.height * 0.6,
+      ),
+      builder: (BuildContext context) {
+        return AnimatedPadding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: DirectMessageComposer(
+            recipient: widget.profile,
+            onMessageSent: () {
+              // Close the bottom sheet after message is sent
+              Navigator.of(context).pop();
+            },
+          ),
+        );
+      },
+    );
   }
 }
