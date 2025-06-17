@@ -30,11 +30,35 @@ class NostrProfile {
       final content = event['content'] as String;
       final profileData = jsonDecode(content) as Map<String, dynamic>;
       
+      // Validate and clean picture URL
+      String? pictureUrl = profileData['picture'] as String?;
+      if (pictureUrl != null && pictureUrl.isNotEmpty) {
+        // Trim whitespace
+        pictureUrl = pictureUrl.trim();
+        // Validate URL format
+        try {
+          final uri = Uri.parse(pictureUrl);
+          if (!uri.hasScheme || (uri.scheme != 'http' && uri.scheme != 'https')) {
+            pictureUrl = null;
+          }
+        } catch (e) {
+          print('Invalid picture URL for ${profileData['name'] ?? 'unknown'}: $pictureUrl');
+          pictureUrl = null;
+        }
+      }
+      
+      // Debug logging for specific profiles
+      if (profileData['name']?.toString().toLowerCase().contains('airport') == true) {
+        print('Debug: Parsing AirportStatusBot profile');
+        print('Raw picture URL: ${profileData['picture']}');
+        print('Cleaned picture URL: $pictureUrl');
+      }
+      
       return NostrProfile(
         pubkey: event['pubkey'] as String,
         name: profileData['name'] as String?,
         displayName: profileData['display_name'] as String?,
-        picture: profileData['picture'] as String?,
+        picture: pictureUrl,
         about: profileData['about'] as String?,
         banner: profileData['banner'] as String?,
         website: profileData['website'] as String?,

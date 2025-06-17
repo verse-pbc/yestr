@@ -6,6 +6,7 @@ import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
+import '../../utils/cors_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
@@ -46,8 +47,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: Text(widget.profile.displayNameOrName),
               background: widget.profile.picture != null
                   ? CachedNetworkImage(
-                      imageUrl: widget.profile.picture!,
+                      imageUrl: CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
                       fit: BoxFit.cover,
+                      httpHeaders: const {
+                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                        'Accept-Language': 'en-US,en;q=0.9',
+                        'Referer': 'https://yestr.app/',
+                      },
                       errorWidget: (context, url, error) {
                         return Container(
                           color: Colors.grey[300],
@@ -260,7 +267,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 CircleAvatar(
                   backgroundImage: widget.profile.picture != null
-                      ? CachedNetworkImageProvider(widget.profile.picture!)
+                      ? CachedNetworkImageProvider(
+                          CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
+                          headers: const {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                            'Accept-Language': 'en-US,en;q=0.9',
+                            'Referer': 'https://yestr.app/',
+                          },
+                        )
                       : null,
                   child: widget.profile.picture == null
                       ? const Icon(Icons.person)
