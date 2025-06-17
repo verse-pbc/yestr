@@ -4,9 +4,13 @@ import 'package:flutter/foundation.dart';
 class ResponsiveWrapper extends StatelessWidget {
   final Widget child;
   
-  // iPhone 13 Pro Max dimensions
+  // iPhone 13 Pro Max dimensions (max size)
   static const double maxWidth = 428.0;
   static const double maxHeight = 926.0;
+  
+  // iPhone SE 3rd generation dimensions (min size)
+  static const double minWidth = 375.0;
+  static const double minHeight = 667.0;
   
   const ResponsiveWrapper({
     super.key,
@@ -22,31 +26,29 @@ class ResponsiveWrapper extends StatelessWidget {
     
     return LayoutBuilder(
       builder: (context, constraints) {
-        // Check if the screen is larger than our max dimensions
-        final bool needsConstraints = constraints.maxWidth > maxWidth;
+        // Check if we need to apply any constraints
+        final bool needsMaxConstraints = constraints.maxWidth > maxWidth;
+        final bool needsMinConstraints = constraints.maxWidth < minWidth || constraints.maxHeight < minHeight;
         
-        if (needsConstraints) {
-          // Calculate the aspect ratio to maintain
+        if (needsMaxConstraints) {
+          // Handle large screens - constrain to max size
           final double aspectRatio = maxWidth / maxHeight;
           
-          // Calculate the actual dimensions to use
           double width = maxWidth;
           double height = maxHeight;
           
-          // If the available height is less than our max height, adjust proportionally
           if (constraints.maxHeight < maxHeight) {
             height = constraints.maxHeight;
             width = height * aspectRatio;
           }
           
-          // If the calculated width is still too large, constrain by width instead
           if (width > constraints.maxWidth) {
             width = constraints.maxWidth;
             height = width / aspectRatio;
           }
           
           return Container(
-            color: Colors.grey[900], // Dark background for the surrounding area
+            color: Colors.grey[900],
             child: Center(
               child: Container(
                 width: width,
@@ -60,7 +62,7 @@ class ResponsiveWrapper extends StatelessWidget {
                       spreadRadius: 5,
                     ),
                   ],
-                  borderRadius: BorderRadius.circular(40), // Rounded corners like a phone
+                  borderRadius: BorderRadius.circular(40),
                 ),
                 clipBehavior: Clip.antiAlias,
                 child: ClipRRect(
@@ -70,9 +72,37 @@ class ResponsiveWrapper extends StatelessWidget {
               ),
             ),
           );
+        } else if (needsMinConstraints) {
+          // Handle small screens - show scrollbars
+          return Container(
+            color: Colors.grey[900],
+            child: Center(
+              child: SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  scrollDirection: Axis.vertical,
+                  child: Container(
+                    width: minWidth,
+                    height: minHeight,
+                    decoration: BoxDecoration(
+                      color: Theme.of(context).scaffoldBackgroundColor,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.2),
+                          blurRadius: 20,
+                          spreadRadius: 5,
+                        ),
+                      ],
+                    ),
+                    child: child,
+                  ),
+                ),
+              ),
+            ),
+          );
         }
         
-        // On smaller screens, just return the child as-is
+        // For medium screens (between min and max), just return the child
         return child;
       },
     );
