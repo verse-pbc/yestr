@@ -30,10 +30,10 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       
       // Listen for profiles
       _nostrService.profilesStream.listen((profile) {
-        if (mounted && _profiles.length < 10) {
+        if (mounted && _profiles.length < 50) {
           setState(() {
             _profiles.add(profile);
-            if (_profiles.length >= 10) {
+            if (_profiles.length >= 50) {
               _isLoading = false;
             }
           });
