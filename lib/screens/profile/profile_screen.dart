@@ -5,6 +5,7 @@ import '../../models/nostr_profile.dart';
 import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
 import '../../widgets/formatted_content.dart';
+import '../../widgets/share_profile_sheet.dart';
 
 class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
@@ -67,7 +68,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               IconButton(
                 icon: const Icon(Icons.share),
                 onPressed: () {
-                  _shareProfile();
+                  ShareProfileSheet.show(context, widget.profile);
                 },
               ),
             ],
@@ -366,13 +367,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final years = (difference.inDays / 365).floor();
       return '${years}y ago';
     }
-  }
-
-  void _shareProfile() {
-    final text = '${widget.profile.displayNameOrName} on Nostr\n\n'
-        '${widget.profile.about ?? ''}\n\n'
-        'npub: ${widget.profile.pubkey}';
-    Share.share(text);
   }
 
   void _shareNote(NostrEvent note) {
