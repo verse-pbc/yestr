@@ -4,6 +4,7 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../widgets/profile_card.dart';
+import '../widgets/dm_composer.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -288,7 +289,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         action = 'Like';
         break;
       case CardSwiperDirection.top:
-        action = 'Super Like';
+        action = 'Send DM';
+        // Show DM composer bottom sheet
+        _showMessageBottomSheet(context, profile);
         break;
       case CardSwiperDirection.bottom:
         action = 'Skip';
@@ -323,5 +326,37 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     CardSwiperDirection direction,
   ) {
     return true;
+  }
+
+  void _showMessageBottomSheet(BuildContext context, NostrProfile profile) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).canvasColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(16.0)),
+      ),
+      // Use at least 60% of screen height and expand if keyboard is shown
+      constraints: BoxConstraints(
+        maxHeight: MediaQuery.of(context).size.height * 0.9,
+        minHeight: MediaQuery.of(context).size.height * 0.6,
+      ),
+      builder: (BuildContext context) {
+        return AnimatedPadding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          duration: const Duration(milliseconds: 150),
+          curve: Curves.easeOut,
+          child: DirectMessageComposer(
+            recipient: profile,
+            onMessageSent: () {
+              // Close the bottom sheet after message is sent
+              Navigator.of(context).pop();
+            },
+          ),
+        );
+      },
+    );
   }
 }

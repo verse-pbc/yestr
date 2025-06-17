@@ -37,6 +37,7 @@ dependencies:
   flutter_card_swiper: ^7.0.0
   dart_nostr: ^4.0.0
   web_socket_channel: ^3.0.0
+  pointycastle: ^3.7.3
   cached_network_image: ^3.3.1
   share_plus: ^10.0.0
   bech32: ^0.2.2
