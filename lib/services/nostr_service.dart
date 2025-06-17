@@ -122,83 +122,147 @@ class NostrService {
   }
 
   Future<List<NostrEvent>> getUserNotes(String pubkey, {int limit = 10}) async {
-    final completer = Completer<List<NostrEvent>>();
-    final notes = <NostrEvent>[];
-    final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+    print('getUserNotes called for pubkey: $pubkey, limit: $limit');
     
-    // Create a new WebSocket connection for this request
-    final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
-    
-    StreamSubscription? subscription;
-    Timer? timeout;
-    
-    void cleanup() {
-      subscription?.cancel();
-      timeout?.cancel();
-      final closeRequest = ["CLOSE", subscriptionId];
-      channel.sink.add(jsonEncode(closeRequest));
-      channel.sink.close();
-    }
-    
-    subscription = channel.stream.listen(
-      (message) {
-        try {
-          final data = jsonDecode(message as String) as List<dynamic>;
-          
-          if (data.length < 2) return;
-          
-          final type = data[0] as String;
-          
-          switch (type) {
-            case 'EVENT':
-              if (data.length >= 3) {
-                final eventData = data[2] as Map<String, dynamic>;
-                if (eventData['kind'] == 1) {
-                  final event = NostrEvent.fromJson(eventData);
-                  notes.add(event);
-                }
-              }
-              break;
-            case 'EOSE':
-              if (data[1] == subscriptionId) {
-                cleanup();
-                notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-                completer.complete(notes.take(limit).toList());
-              }
-              break;
-          }
-        } catch (e) {
-          print('Error handling user notes message: $e');
-        }
-      },
-      onError: (error) {
-        cleanup();
-        completer.completeError(error);
-      },
-    );
-    
-    // Set timeout
-    timeout = Timer(const Duration(seconds: 5), () {
-      cleanup();
-      if (!completer.isCompleted) {
-        notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
-        completer.complete(notes.take(limit).toList());
-      }
-    });
-    
-    // Request notes from the user
-    final request = [
-      "REQ",
-      subscriptionId,
-      {
-        "kinds": [1],
-        "authors": [pubkey],
-        "limit": limit * 2, // Request more to ensure we get enough
-      }
+    // Use multiple popular relays to ensure we get notes
+    final relays = [
+      'wss://relay.damus.io',
+      'wss://relay.primal.net',
+      'wss://nos.lol',
+      'wss://relay.nostr.band',
+      relayUrl, // Also include yestr relay
     ];
     
-    channel.sink.add(jsonEncode(request));
+    final allNotes = <String, NostrEvent>{};
+    final futures = <Future<void>>[];
     
-    return completer.future;
+    for (final relay in relays) {
+      futures.add(_fetchNotesFromRelay(relay, pubkey, limit * 2, allNotes));
+    }
+    
+    // Wait for all relays to respond or timeout
+    await Future.wait(futures, eagerError: false);
+    
+    // Sort notes by creation time (newest first)
+    final sortedNotes = allNotes.values.toList()
+      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
+    
+    print('Total unique notes found: ${sortedNotes.length}');
+    
+    // Return requested limit
+    return sortedNotes.take(limit).toList();
+  }
+  
+  Future<void> _fetchNotesFromRelay(
+    String relayUrl,
+    String pubkey,
+    int limit,
+    Map<String, NostrEvent> allNotes,
+  ) async {
+    try {
+      print('Fetching notes from relay: $relayUrl');
+      
+      final completer = Completer<void>();
+      final subscriptionId = '${DateTime.now().millisecondsSinceEpoch}_${relayUrl.hashCode}';
+      
+      // Create a new WebSocket connection for this relay
+      final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
+      
+      StreamSubscription? subscription;
+      Timer? timeout;
+      int notesFromThisRelay = 0;
+      
+      void cleanup() {
+        subscription?.cancel();
+        timeout?.cancel();
+        try {
+          final closeRequest = ["CLOSE", subscriptionId];
+          channel.sink.add(jsonEncode(closeRequest));
+          channel.sink.close();
+        } catch (e) {
+          // Ignore cleanup errors
+        }
+      }
+      
+      subscription = channel.stream.listen(
+        (message) {
+          try {
+            final data = jsonDecode(message as String) as List<dynamic>;
+            
+            if (data.length < 2) return;
+            
+            final type = data[0] as String;
+            
+            switch (type) {
+              case 'EVENT':
+                if (data.length >= 3) {
+                  final eventData = data[2] as Map<String, dynamic>;
+                  if (eventData['kind'] == 1) {
+                    final event = NostrEvent.fromJson(eventData);
+                    allNotes[event.id] = event;
+                    notesFromThisRelay++;
+                  }
+                }
+                break;
+              case 'EOSE':
+                if (data[1] == subscriptionId) {
+                  print('Relay $relayUrl: Got $notesFromThisRelay notes');
+                  cleanup();
+                  if (!completer.isCompleted) {
+                    completer.complete();
+                  }
+                }
+                break;
+              case 'NOTICE':
+                print('Relay $relayUrl notice: ${data[1]}');
+                break;
+            }
+          } catch (e) {
+            print('Error handling message from $relayUrl: $e');
+          }
+        },
+        onError: (error) {
+          print('WebSocket error from $relayUrl: $error');
+          cleanup();
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        },
+        onDone: () {
+          cleanup();
+          if (!completer.isCompleted) {
+            completer.complete();
+          }
+        },
+      );
+      
+      // Set timeout for this relay
+      timeout = Timer(const Duration(seconds: 3), () {
+        print('Timeout for relay: $relayUrl');
+        cleanup();
+        if (!completer.isCompleted) {
+          completer.complete();
+        }
+      });
+      
+      // Request notes from the user
+      final request = [
+        "REQ",
+        subscriptionId,
+        {
+          "kinds": [1],
+          "authors": [pubkey],
+          "limit": limit,
+        }
+      ];
+      
+      final requestJson = jsonEncode(request);
+      channel.sink.add(requestJson);
+      print('Sent request to $relayUrl: $requestJson');
+      
+      await completer.future;
+    } catch (e) {
+      print('Error connecting to relay $relayUrl: $e');
+    }
   }
 }

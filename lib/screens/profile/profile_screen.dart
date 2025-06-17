@@ -27,6 +27,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    print('ProfileScreen: Loading notes for ${widget.profile.displayNameOrName} (${widget.profile.pubkey})');
     _notesFuture = _nostrService.getUserNotes(widget.profile.pubkey, limit: 10);
   }
 
@@ -180,11 +181,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
               }
               
               if (snapshot.hasError) {
+                print('Error loading notes: ${snapshot.error}');
+                print('Stack trace: ${snapshot.stackTrace}');
                 return SliverToBoxAdapter(
                   child: Padding(
                     padding: const EdgeInsets.all(16.0),
                     child: Center(
-                      child: Text('Error loading posts: ${snapshot.error}'),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.error_outline, size: 48, color: Colors.red),
+                          const SizedBox(height: 8),
+                          Text('Error loading posts: ${snapshot.error}'),
+                        ],
+                      ),
                     ),
                   ),
                 );
