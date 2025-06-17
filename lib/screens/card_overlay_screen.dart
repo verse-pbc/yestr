@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../widgets/profile_card.dart';
@@ -68,7 +69,11 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Nostr Profiles'),
+        title: SvgPicture.asset(
+          'assets/images/yestr_logo.svg',
+          height: 32,
+        ),
+        centerTitle: true,
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: SafeArea(
