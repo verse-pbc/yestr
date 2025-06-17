@@ -40,44 +40,84 @@ class _ProfileScreenState extends State<ProfileScreen> {
             expandedHeight: 300.0,
             floating: false,
             pinned: true,
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back),
-              onPressed: () => Navigator.of(context).pop(),
+            leading: Padding(
+              padding: const EdgeInsets.all(8.0),
+              child: Container(
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.7),
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: const Icon(Icons.arrow_back, color: Colors.white),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
+              ),
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(widget.profile.displayNameOrName),
-              background: widget.profile.picture != null
-                  ? CachedNetworkImage(
-                      imageUrl: CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
-                      fit: BoxFit.cover,
-                      httpHeaders: const {
-                        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                        'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-                        'Accept-Language': 'en-US,en;q=0.9',
-                        'Referer': 'https://yestr.app/',
-                      },
-                      errorWidget: (context, url, error) {
-                        return Container(
+              background: Stack(
+                fit: StackFit.expand,
+                children: [
+                  // Profile image
+                  widget.profile.picture != null
+                      ? CachedNetworkImage(
+                          imageUrl: CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
+                          fit: BoxFit.cover,
+                          httpHeaders: const {
+                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                            'Accept-Language': 'en-US,en;q=0.9',
+                            'Referer': 'https://yestr.app/',
+                          },
+                          errorWidget: (context, url, error) {
+                            return Container(
+                              color: Colors.grey[300],
+                              child: const Center(
+                                child: Icon(Icons.error, size: 50),
+                              ),
+                            );
+                          },
+                        )
+                      : Container(
                           color: Colors.grey[300],
                           child: const Center(
-                            child: Icon(Icons.error, size: 50),
+                            child: Icon(Icons.person, size: 120),
                           ),
-                        );
-                      },
-                    )
-                  : Container(
-                      color: Colors.grey[300],
-                      child: const Center(
-                        child: Icon(Icons.person, size: 120),
+                        ),
+                  // Gradient overlay (same as ProfileCard)
+                  Positioned.fill(
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topCenter,
+                          end: Alignment.bottomCenter,
+                          colors: [
+                            Colors.transparent,
+                            Colors.black.withOpacity(0.7),
+                          ],
+                          stops: const [0.6, 1.0],
+                        ),
                       ),
                     ),
+                  ),
+                ],
+              ),
             ),
             actions: [
-              IconButton(
-                icon: const Icon(Icons.share),
-                onPressed: () {
-                  ShareProfileSheet.show(context, widget.profile);
-                },
+              Padding(
+                padding: const EdgeInsets.all(8.0),
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.7),
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.share, color: Colors.white),
+                    onPressed: () {
+                      ShareProfileSheet.show(context, widget.profile);
+                    },
+                  ),
+                ),
               ),
             ],
           ),
