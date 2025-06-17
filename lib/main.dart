@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'screens/card_overlay_screen.dart';
+import 'screens/login_screen.dart';
 import 'widgets/responsive_wrapper.dart';
 
 void main() {
@@ -56,7 +56,7 @@ class MyApp extends StatelessWidget {
           child: child ?? const SizedBox.shrink(),
         );
       },
-      home: const CardOverlayScreen(),
+      home: const LoginScreen(),
     );
   }
 }

@@ -1,8 +1,9 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:dart_nostr/dart_nostr.dart' as nostr;
 import '../models/nostr_profile.dart';
-import '../models/nostr_event.dart';
+import '../models/nostr_event.dart' as local;
 
 class NostrService {
   static const String relayUrl = 'wss://relay.yestr.social';
@@ -13,6 +14,7 @@ class NostrService {
 
   Stream<NostrProfile> get profilesStream => _profilesController.stream;
   List<NostrProfile> get profiles => List.unmodifiable(_profiles);
+  bool get isConnected => _channel != null;
 
   Future<void> connect() async {
     try {
@@ -121,7 +123,91 @@ class NostrService {
     _profiles.clear();
   }
 
-  Future<List<NostrEvent>> getUserNotes(String pubkey, {int limit = 10}) async {
+  /// Publish an event to the connected relay
+  void publishEvent(Map<String, dynamic> eventData) {
+    if (_channel == null) {
+      throw Exception('Not connected to relay');
+    }
+
+    try {
+      // Create EVENT message
+      final message = [
+        "EVENT",
+        eventData,
+      ];
+
+      final messageJson = jsonEncode(message);
+      _channel!.sink.add(messageJson);
+      
+      print('Published event: ${eventData['id']}');
+      print('Event kind: ${eventData['kind']}');
+    } catch (e) {
+      print('Error publishing event: $e');
+      throw e;
+    }
+  }
+
+  /// Subscribe to events matching a filter - simplified version
+  Stream<Map<String, dynamic>> subscribeToSimpleFilter(Map<String, dynamic> filter) {
+    if (_channel == null) {
+      throw Exception('Not connected to relay');
+    }
+
+    final controller = StreamController<Map<String, dynamic>>.broadcast();
+    final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
+
+    // Listen for events
+    StreamSubscription? subscription;
+    subscription = _channel!.stream.listen(
+      (message) {
+        try {
+          final data = jsonDecode(message as String) as List<dynamic>;
+          
+          if (data.length < 2) return;
+          
+          final type = data[0] as String;
+          
+          if (type == 'EVENT' && data[1] == subscriptionId && data.length >= 3) {
+            final eventData = data[2] as Map<String, dynamic>;
+            controller.add(eventData);
+          } else if (type == 'EOSE' && data[1] == subscriptionId) {
+            // End of stored events
+            controller.close();
+            subscription?.cancel();
+          }
+        } catch (e) {
+          print('Error in subscription: $e');
+        }
+      },
+      onError: (error) {
+        controller.addError(error);
+        controller.close();
+      },
+      onDone: () {
+        controller.close();
+      },
+    );
+
+    // Send subscription request
+    final request = [
+      "REQ",
+      subscriptionId,
+      filter,
+    ];
+    
+    _channel!.sink.add(jsonEncode(request));
+    
+    // Cleanup on stream cancellation
+    controller.onCancel = () {
+      final closeRequest = ["CLOSE", subscriptionId];
+      _channel?.sink.add(jsonEncode(closeRequest));
+      subscription?.cancel();
+    };
+
+    return controller.stream;
+  }
+
+  Future<List<local.NostrEvent>> getUserNotes(String pubkey, {int limit = 10}) async {
     print('getUserNotes called for pubkey: $pubkey, limit: $limit');
     
     // Use multiple popular relays to ensure we get notes
@@ -133,7 +219,7 @@ class NostrService {
       relayUrl, // Also include yestr relay
     ];
     
-    final allNotes = <String, NostrEvent>{};
+    final allNotes = <String, local.NostrEvent>{};
     final futures = <Future<void>>[];
     
     for (final relay in relays) {
@@ -157,7 +243,7 @@ class NostrService {
     String relayUrl,
     String pubkey,
     int limit,
-    Map<String, NostrEvent> allNotes,
+    Map<String, local.NostrEvent> allNotes,
   ) async {
     try {
       print('Fetching notes from relay: $relayUrl');
@@ -198,7 +284,7 @@ class NostrService {
                 if (data.length >= 3) {
                   final eventData = data[2] as Map<String, dynamic>;
                   if (eventData['kind'] == 1) {
-                    final event = NostrEvent.fromJson(eventData);
+                    final event = local.NostrEvent.fromJson(eventData);
                     allNotes[event.id] = event;
                     notesFromThisRelay++;
                   }
