@@ -1,61 +1,90 @@
 import 'dart:convert';
 import 'dart:typed_data';
+import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:convert/convert.dart';
-import 'package:dart_nostr/dart_nostr.dart';
+import 'package:bip340/bip340.dart' as bip340;
 
-/// Helper class to sign Nostr events manually
+/// Helper class to sign Nostr events according to NIP-01
 class EventSigner {
+  
+  /// Create and sign an event according to NIP-01
+  static Map<String, dynamic> createSignedEvent({
+    required String privateKeyHex,
+    required String publicKeyHex,
+    required int kind,
+    required String content,
+    required List<List<String>> tags,
+  }) {
+    // Current timestamp
+    final createdAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    
+    // Create the event structure (without id and sig)
+    final eventForId = [
+      0, // Reserved for future use
+      publicKeyHex,
+      createdAt,
+      kind,
+      tags,
+      content,
+    ];
+    
+    // Calculate event ID (sha256 hash of the serialized event)
+    final eventId = _calculateEventId(eventForId);
+    
+    // Sign the event ID
+    final signature = _signEventId(eventId, privateKeyHex);
+    
+    // Return complete event
+    return {
+      'id': eventId,
+      'pubkey': publicKeyHex,
+      'created_at': createdAt,
+      'kind': kind,
+      'tags': tags,
+      'content': content,
+      'sig': signature,
+    };
+  }
+  
   /// Create and sign a contact list event (kind 3)
   static Map<String, dynamic> createContactListEvent({
-    required String privateKey,
-    required String publicKey,
+    required String privateKeyHex,
+    required String publicKeyHex,
     required List<String> followedPubkeys,
   }) {
     // Create tags for each followed profile
     final tags = followedPubkeys.map((pubkey) => ['p', pubkey]).toList();
     
-    // Current timestamp
-    final createdAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-    
-    // Create the event content structure
-    final eventContent = {
-      'pubkey': publicKey,
-      'created_at': createdAt,
-      'kind': 3,
-      'tags': tags,
-      'content': '',
-    };
-    
-    // Calculate event ID
-    final eventId = _calculateEventId(eventContent);
-    
-    // Add ID to event
-    eventContent['id'] = eventId;
-    
-    // Sign the event
-    final signature = _signEvent(eventId, privateKey);
-    
-    // Add signature
-    eventContent['sig'] = signature;
-    
-    return eventContent;
+    return createSignedEvent(
+      privateKeyHex: privateKeyHex,
+      publicKeyHex: publicKeyHex,
+      kind: 3,
+      content: '',
+      tags: tags,
+    );
+  }
+  
+  /// Create and sign a text note event (kind 1)
+  static Map<String, dynamic> createTextNoteEvent({
+    required String privateKeyHex,
+    required String publicKeyHex,
+    required String content,
+    List<List<String>> tags = const [],
+  }) {
+    return createSignedEvent(
+      privateKeyHex: privateKeyHex,
+      publicKeyHex: publicKeyHex,
+      kind: 1,
+      content: content,
+      tags: tags,
+    );
   }
   
   /// Calculate event ID according to NIP-01
-  static String _calculateEventId(Map<String, dynamic> event) {
-    // Create the serialized event array
-    final serialized = [
-      0, // Reserved for future use
-      event['pubkey'],
-      event['created_at'],
-      event['kind'],
-      event['tags'],
-      event['content'],
-    ];
-    
-    // Convert to canonical JSON
-    final jsonStr = jsonEncode(serialized);
+  static String _calculateEventId(List<dynamic> eventForId) {
+    // Serialize to canonical JSON (no spaces)
+    final jsonStr = jsonEncode(eventForId);
     
     // Calculate SHA256 hash
     final bytes = utf8.encode(jsonStr);
@@ -64,20 +93,47 @@ class EventSigner {
     return digest.toString();
   }
   
-  /// Sign event with private key
-  static String _signEvent(String eventId, String privateKey) {
+  /// Sign event ID with private key using bip340 Schnorr signatures
+  static String _signEventId(String eventId, String privateKeyHex) {
     try {
-      // Use dart_nostr's built-in signing capability
-      final keyPairs = Nostr.instance.keysService.generateKeyPair();
+      // Generate random auxiliary data (32 bytes as hex)
+      final random = Random.secure();
+      final randomBytes = List<int>.generate(32, (i) => random.nextInt(256));
+      final aux = hex.encode(randomBytes);
       
-      // We need to use the actual private key, but dart_nostr v4 doesn't expose
-      // a way to create KeyPairs from existing keys, so we'll use the raw signing
-      
-      // For now, return a placeholder signature
-      // In production, you'd need to use a proper secp256k1 library
-      return 'placeholder_signature_${eventId.substring(0, 8)}';
+      // Sign using BIP340 Schnorr signatures
+      final signature = bip340.sign(privateKeyHex, eventId, aux);
+      return signature;
     } catch (e) {
       throw Exception('Failed to sign event: $e');
+    }
+  }
+  
+  /// Verify an event signature
+  static bool verifyEvent(Map<String, dynamic> event) {
+    try {
+      // Recreate the event for ID calculation
+      final eventForId = [
+        0,
+        event['pubkey'],
+        event['created_at'],
+        event['kind'],
+        event['tags'],
+        event['content'],
+      ];
+      
+      // Calculate expected ID
+      final calculatedId = _calculateEventId(eventForId);
+      
+      // Verify ID matches
+      if (calculatedId != event['id']) {
+        return false;
+      }
+      
+      // Verify signature using BIP340
+      return bip340.verify(event['pubkey'], event['id'], event['sig']);
+    } catch (e) {
+      return false;
     }
   }
 }

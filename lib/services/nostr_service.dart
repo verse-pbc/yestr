@@ -4,20 +4,24 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:dart_nostr/dart_nostr.dart' as nostr;
 import '../models/nostr_profile.dart';
 import '../models/nostr_event.dart' as local;
+import 'relay_pool.dart';
 
 class NostrService {
   static const String relayUrl = 'wss://relay.yestr.social';
   WebSocketChannel? _channel;
+  final RelayPool _relayPool = RelayPool();
   final _profilesController = StreamController<NostrProfile>.broadcast();
   final List<NostrProfile> _profiles = [];
   String? _subscriptionId;
+  StreamSubscription? _relayEventSubscription;
 
   Stream<NostrProfile> get profilesStream => _profilesController.stream;
   List<NostrProfile> get profiles => List.unmodifiable(_profiles);
-  bool get isConnected => _channel != null;
+  bool get isConnected => _channel != null || _relayPool.isConnected;
 
   Future<void> connect() async {
     try {
+      // Connect to single relay for backward compatibility
       _channel = WebSocketChannel.connect(Uri.parse(relayUrl));
       print('Connected to relay: $relayUrl');
       
@@ -32,11 +36,55 @@ class NostrService {
         },
       );
 
+      // Also connect to relay pool
+      await connectToMultipleRelays();
+
       // Request profiles
       await _requestProfiles();
     } catch (e) {
       print('Connection error: $e');
       rethrow;
+    }
+  }
+  
+  /// Connect to multiple relays for better reliability
+  Future<void> connectToMultipleRelays() async {
+    try {
+      // Connect to default relays
+      await _relayPool.connectToDefaultRelays();
+      
+      // Listen to events from all relays
+      _relayEventSubscription = _relayPool.eventStream.listen((relayEvent) {
+        if (relayEvent.event != null) {
+          // Handle events from relay pool
+          _handleEventFromPool(relayEvent.event!);
+        }
+      });
+      
+      print('Connected to ${_relayPool.connectedRelays.length} relays');
+    } catch (e) {
+      print('Error connecting to relay pool: $e');
+    }
+  }
+  
+  void _handleEventFromPool(Map<String, dynamic> eventData) {
+    // This handles events from the relay pool
+    // Similar to _handleEvent but for multiple relays
+    try {
+      if (eventData['kind'] == 0) {
+        final profile = NostrProfile.fromNostrEvent(eventData);
+        
+        // Avoid duplicates by checking pubkey
+        if (!_profiles.any((p) => p.pubkey == profile.pubkey)) {
+          if (profile.picture != null && 
+              (profile.name != null || profile.displayName != null)) {
+            _profiles.add(profile);
+            _profilesController.add(profile);
+          }
+        }
+      }
+    } catch (e) {
+      // Ignore parsing errors
     }
   }
 
@@ -123,28 +171,38 @@ class NostrService {
     _profiles.clear();
   }
 
-  /// Publish an event to the connected relay
-  void publishEvent(Map<String, dynamic> eventData) {
-    if (_channel == null) {
-      throw Exception('Not connected to relay');
+  /// Publish an event to all connected relays
+  Future<Map<String, bool>> publishEvent(Map<String, dynamic> eventData) async {
+    final results = <String, bool>{};
+    
+    // Publish to relay pool (multiple relays)
+    if (_relayPool.isConnected) {
+      final poolResults = await _relayPool.publishEvent(eventData);
+      results.addAll(poolResults);
     }
+    
+    // Also publish to single relay for backward compatibility
+    if (_channel != null) {
+      try {
+        // Create EVENT message
+        final message = [
+          "EVENT",
+          eventData,
+        ];
 
-    try {
-      // Create EVENT message
-      final message = [
-        "EVENT",
-        eventData,
-      ];
-
-      final messageJson = jsonEncode(message);
-      _channel!.sink.add(messageJson);
-      
-      print('Published event: ${eventData['id']}');
-      print('Event kind: ${eventData['kind']}');
-    } catch (e) {
-      print('Error publishing event: $e');
-      throw e;
+        final messageJson = jsonEncode(message);
+        _channel!.sink.add(messageJson);
+        results[relayUrl] = true;
+      } catch (e) {
+        results[relayUrl] = false;
+        print('Error publishing to $relayUrl: $e');
+      }
     }
+    
+    print('Published event ${eventData['id']} to ${results.values.where((v) => v).length}/${results.length} relays');
+    print('Event kind: ${eventData['kind']}');
+    
+    return results;
   }
 
   /// Subscribe to events matching a filter - simplified version

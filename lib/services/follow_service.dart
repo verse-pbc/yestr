@@ -4,6 +4,7 @@ import 'package:dart_nostr/dart_nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
+import 'event_signer.dart';
 
 class FollowService {
   static const String _followedProfilesKey = 'followed_profiles';
@@ -144,19 +145,30 @@ class FollowService {
         throw Exception('No keys available');
       }
 
-      // For now, just log the action
-      // In a real implementation, you would:
-      // 1. Create the event with proper signing
-      // 2. Send it to relays
+      // Create signed contact list event
+      final event = EventSigner.createContactListEvent(
+        privateKeyHex: keys['private']!,
+        publicKeyHex: keys['public']!,
+        followedPubkeys: _followedProfiles.toList(),
+      );
       
       if (kDebugMode) {
-        print('Would publish contact list with ${_followedProfiles.length} contacts');
-        print('User pubkey: ${keys['public']}');
+        print('Created signed contact list event:');
+        print('  ID: ${event['id']}');
+        print('  Contacts: ${_followedProfiles.length}');
       }
+
+      // Ensure NostrService is connected
+      if (!_nostrService.isConnected) {
+        await _nostrService.connect();
+      }
+
+      // Publish to relay
+      _nostrService.publishEvent(event);
       
-      // Note: dart_nostr v4.0.0 has limitations for creating events from existing keys
-      // This is a simplified implementation for demonstration
-      
+      if (kDebugMode) {
+        print('Published contact list with ${_followedProfiles.length} contacts');
+      }
     } catch (e) {
       if (kDebugMode) {
         print('Error publishing contact list: $e');
