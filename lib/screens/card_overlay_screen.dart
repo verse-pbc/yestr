@@ -71,10 +71,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       appBar: AppBar(
         title: SvgPicture.asset(
           'assets/images/yestr_logo.svg',
-          height: 32,
+          height: 40,
         ),
         centerTitle: true,
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
       ),
       body: SafeArea(
         child: _isLoading

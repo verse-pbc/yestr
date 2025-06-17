@@ -48,7 +48,7 @@ class ResponsiveWrapper extends StatelessWidget {
           }
           
           return Container(
-            color: Colors.grey[900],
+            color: const Color(0xFF1a1c22),
             child: Center(
               child: Container(
                 width: width,
@@ -75,7 +75,7 @@ class ResponsiveWrapper extends StatelessWidget {
         } else if (needsMinConstraints) {
           // Handle small screens - show scrollbars
           return Container(
-            color: Colors.grey[900],
+            color: const Color(0xFF1a1c22),
             child: Center(
               child: SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
