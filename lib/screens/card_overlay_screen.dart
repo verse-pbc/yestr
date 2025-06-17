@@ -265,52 +265,80 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     return Scaffold(
       drawerScrimColor: Colors.black.withOpacity(0.6), // Dim background when drawer is open
       drawer: AppDrawer(),
-      appBar: PreferredSize(
-        preferredSize: const Size.fromHeight(kToolbarHeight + 8),
-        child: AppBar(
-          leading: Builder(
-            builder: (context) => Padding(
-              padding: const EdgeInsets.only(top: 8.0),
-              child: IconButton(
-                icon: const Icon(Icons.menu, color: Colors.white, size: 30),
-                onPressed: () => Scaffold.of(context).openDrawer(),
+      body: Stack(
+        children: [
+          // App bar layer (bottom layer - lowest z-index)
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).primaryColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: SafeArea(
+                bottom: false,
+                child: SizedBox(
+                  height: kToolbarHeight + 8,
+                  child: AppBar(
+                    elevation: 0,
+                    backgroundColor: Colors.transparent,
+                    leading: Builder(
+                      builder: (context) => Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: IconButton(
+                          icon: const Icon(Icons.menu, color: Colors.white, size: 30),
+                          onPressed: () => Scaffold.of(context).openDrawer(),
+                        ),
+                      ),
+                    ),
+                    title: Padding(
+                      padding: const EdgeInsets.only(top: 8.0),
+                      child: SvgPicture.asset(
+                        'assets/images/yestr_logo.svg',
+                        height: 40,
+                      ),
+                    ),
+                    centerTitle: true,
+                    toolbarHeight: kToolbarHeight + 8,
+                    titleSpacing: 0,
+                  ),
+                ),
               ),
             ),
           ),
-          title: Padding(
-            padding: const EdgeInsets.only(top: 8.0),
-            child: SvgPicture.asset(
-              'assets/images/yestr_logo.svg',
-              height: 40,
-            ),
-          ),
-          centerTitle: true,
-          toolbarHeight: kToolbarHeight + 8,
-          titleSpacing: 0,
-          bottom: PreferredSize(
-            preferredSize: const Size.fromHeight(0),
-            child: Container(),
-          ),
-        ),
-      ),
-      body: SafeArea(
-        child: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _profiles.isEmpty
-                ? const Center(
-                    child: Text('No profiles found'),
-                  )
-                : Column(
-                    children: [
-                      Expanded(
-                        child: CardSwiper(
+          // Cards layer (top layer - highest z-index) - takes full screen
+          SafeArea(
+            top: false, // Allow cards to extend under the app bar
+            child: _isLoading
+                ? const Center(child: CircularProgressIndicator())
+                : _profiles.isEmpty
+                    ? const Center(
+                        child: Text('No profiles found'),
+                      )
+                    : Column(
+                        children: [
+                          Expanded(
+                            child: CardSwiper(
                           controller: controller,
                           cardsCount: _profiles.length,
                           onSwipe: _onSwipe,
                           onUndo: _onUndo,
                           numberOfCardsDisplayed: 3,
                           backCardOffset: const Offset(40, 40),
-                          padding: const EdgeInsets.all(24.0),
+                          padding: const EdgeInsets.only(
+                            left: 24.0,
+                            right: 24.0,
+                            top: kToolbarHeight + 32.0, // Add space for app bar plus some padding
+                            bottom: 24.0,
+                          ),
                           cardBuilder: (
                             context,
                             index,
@@ -468,6 +496,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                       ),
                     ],
                   ),
+          ),
+        ],
       ),
     );
   }
