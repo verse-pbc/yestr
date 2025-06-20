@@ -109,6 +109,7 @@ class DirectMessageService {
 
       // Generate shared secret using ECDH
       final sharedSecret = _computeSharedSecret(privateKeyBytes, publicKeyBytes);
+      print('[DM Service] Shared secret length: ${sharedSecret.length}');
 
       // Generate random IV
       final secureRandom = FortunaRandom();
@@ -122,6 +123,7 @@ class DirectMessageService {
       
       secureRandom.seed(KeyParameter(seed));
       final iv = secureRandom.nextBytes(16);
+      print('[DM Service] IV length: ${iv.length}');
 
       // Encrypt the message
       final cipher = PaddedBlockCipher('AES/CBC/PKCS7');
@@ -130,13 +132,14 @@ class DirectMessageService {
 
       final messageBytes = Uint8List.fromList(utf8.encode(message));
       final encrypted = cipher.process(messageBytes);
+      print('[DM Service] Encrypted length: ${encrypted.length}');
 
-      // Combine encrypted data and IV, then base64 encode
-      final combined = Uint8List(encrypted.length + iv.length);
-      combined.setAll(0, encrypted);
-      combined.setAll(encrypted.length, iv);
-
-      final result = '${base64.encode(combined)}?iv=${base64.encode(iv)}';
+      // According to NIP-04: base64-encoded encrypted string appended by the base64-encoded IV
+      final encryptedBase64 = base64.encode(encrypted);
+      final ivBase64 = base64.encode(iv);
+      final result = '$encryptedBase64?iv=$ivBase64';
+      
+      print('[DM Service] Final encrypted content format: <encrypted>?iv=<iv>');
       return result;
     } catch (e) {
       print('Encryption error: $e');
@@ -156,22 +159,23 @@ class DirectMessageService {
       final privKey = ECPrivateKey(d, domainParams);
 
       // Create public key point
-      // Assuming compressed public key (33 bytes) or uncompressed (65 bytes)
+      // For Nostr, public keys are 32-byte X coordinates
+      // We need to prepend 0x02 to make it a valid compressed public key
       ECPoint? pubPoint;
-      if (publicKey.length == 33) {
-        // Compressed public key
+      if (publicKey.length == 32) {
+        // Nostr public key - just X coordinate
+        final compressed = Uint8List(33);
+        compressed[0] = 0x02; // Assume even Y coordinate
+        compressed.setRange(1, 33, publicKey);
+        pubPoint = curve.curve.decodePoint(compressed);
+      } else if (publicKey.length == 33) {
+        // Already compressed
         pubPoint = curve.curve.decodePoint(publicKey);
       } else if (publicKey.length == 65) {
         // Uncompressed public key
         pubPoint = curve.curve.decodePoint(publicKey);
-      } else if (publicKey.length == 32) {
-        // Only X coordinate provided, prepend 0x02 for compressed format
-        final compressed = Uint8List(33);
-        compressed[0] = 0x02;
-        compressed.setRange(1, 33, publicKey);
-        pubPoint = curve.curve.decodePoint(compressed);
       } else {
-        throw Exception('Invalid public key length');
+        throw Exception('Invalid public key length: ${publicKey.length}');
       }
 
       if (pubPoint == null) {
@@ -184,10 +188,11 @@ class DirectMessageService {
         throw Exception('Failed to compute shared point');
       }
 
-      // Return X coordinate of shared point as shared secret
+      // Return X coordinate of shared point as shared secret (NIP-04 spec)
       final sharedX = sharedPoint.x!.toBigInteger()!;
       final sharedBytes = _bigIntToBytes(sharedX, 32);
-
+      
+      print('[DM Service] Shared secret (X coordinate): ${hex.encode(sharedBytes)}');
       return sharedBytes;
     } catch (e) {
       print('Error computing shared secret: $e');
