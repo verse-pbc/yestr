@@ -56,10 +56,26 @@ class ResponsiveWrapper extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: Theme.of(context).scaffoldBackgroundColor,
                   boxShadow: [
+                    // Main shadow - simulates direct light from above
                     BoxShadow(
-                      color: Colors.black.withOpacity(0.2),
-                      blurRadius: 20,
-                      spreadRadius: 5,
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 40,
+                      spreadRadius: 0,
+                      offset: const Offset(0, 20),
+                    ),
+                    // Ambient shadow - softer and more spread out
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.15),
+                      blurRadius: 60,
+                      spreadRadius: 10,
+                      offset: const Offset(0, 10),
+                    ),
+                    // Close shadow - for depth
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.25),
+                      blurRadius: 15,
+                      spreadRadius: -5,
+                      offset: const Offset(0, 8),
                     ),
                   ],
                   borderRadius: BorderRadius.circular(40),
@@ -87,10 +103,26 @@ class ResponsiveWrapper extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: Theme.of(context).scaffoldBackgroundColor,
                       boxShadow: [
+                        // Main shadow - simulates direct light from above
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.2),
-                          blurRadius: 20,
-                          spreadRadius: 5,
+                          color: Colors.black.withOpacity(0.35),
+                          blurRadius: 40,
+                          spreadRadius: 0,
+                          offset: const Offset(0, 20),
+                        ),
+                        // Ambient shadow - softer and more spread out
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.15),
+                          blurRadius: 60,
+                          spreadRadius: 10,
+                          offset: const Offset(0, 10),
+                        ),
+                        // Close shadow - for depth
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.25),
+                          blurRadius: 15,
+                          spreadRadius: -5,
+                          offset: const Offset(0, 8),
                         ),
                       ],
                     ),
