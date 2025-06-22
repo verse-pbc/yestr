@@ -3,6 +3,8 @@ import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
 import '../services/web_background_service.dart';
 import '../screens/login_screen.dart';
+import '../screens/saved_profiles_screen.dart';
+import '../screens/card_overlay_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -30,6 +32,9 @@ class _AppDrawerState extends State<AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    // Get current route to determine which item is selected
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    
     return Drawer(
       backgroundColor: const Color(0xFF1a1c22),
       child: Column(
@@ -57,9 +62,17 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'Discover',
                   onTap: () {
                     Navigator.pop(context); // Close drawer
-                    // Already on Discover screen
+                    if (currentRoute != '/' && currentRoute != '/discover') {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CardOverlayScreen(),
+                          settings: const RouteSettings(name: '/discover'),
+                        ),
+                      );
+                    }
                   },
-                  isSelected: true,
+                  isSelected: currentRoute == '/' || currentRoute == '/discover' || currentRoute == null,
                 ),
                 _buildDrawerItem(
                   context,
@@ -67,11 +80,17 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'Saved',
                   onTap: () {
                     Navigator.pop(context);
-                    // TODO: Navigate to Saved screen
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Saved feature coming soon!')),
-                    );
+                    if (currentRoute != '/saved') {
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SavedProfilesScreen(),
+                          settings: const RouteSettings(name: '/saved'),
+                        ),
+                      );
+                    }
                   },
+                  isSelected: currentRoute == '/saved',
                 ),
                 _buildDrawerItem(
                   context,
@@ -84,6 +103,7 @@ class _AppDrawerState extends State<AppDrawer> {
                       const SnackBar(content: Text('Settings coming soon!')),
                     );
                   },
+                  isSelected: false,
                 ),
               ],
             ),

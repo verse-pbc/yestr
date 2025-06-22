@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/nostr_profile.dart';
-import '../services/direct_message_service.dart';
-import '../services/nip17_dm_service.dart';
+import '../services/ndk_dm_service.dart';
 import '../services/key_management_service.dart';
 
 class DirectMessageComposer extends StatefulWidget {
@@ -21,17 +20,13 @@ class DirectMessageComposer extends StatefulWidget {
 class _DirectMessageComposerState extends State<DirectMessageComposer> {
   final TextEditingController _messageController = TextEditingController();
   final KeyManagementService _keyManagementService = KeyManagementService();
-  late final DirectMessageService _dmService;
-  late final Nip17DmService _nip17DmService;
+  late final NDKDmService _dmService;
   bool _isSending = false;
-  // Default to NIP-04 for compatibility with most clients
-  bool _useNip17 = false;
 
   @override
   void initState() {
     super.initState();
-    _dmService = DirectMessageService(_keyManagementService);
-    _nip17DmService = Nip17DmService(_keyManagementService);
+    _dmService = NDKDmService(_keyManagementService);
   }
 
   @override
@@ -63,12 +58,10 @@ class _DirectMessageComposerState extends State<DirectMessageComposer> {
         throw Exception('You need to be logged in to send messages');
       }
       
-      // Send the encrypted message
+      // Send the encrypted message using NDK (NIP-17)
       print('[DM Composer] Calling sendDirectMessage...');
-      print('[DM Composer] Using ${_useNip17 ? "NIP-17" : "NIP-04"} encryption');
-      final success = _useNip17 
-          ? await _nip17DmService.sendDirectMessage(message, widget.recipient)
-          : await _dmService.sendDirectMessage(message, widget.recipient);
+      print('[DM Composer] Using NDK with NIP-17 encryption');
+      final success = await _dmService.sendDirectMessage(message, widget.recipient);
       print('[DM Composer] Send result: $success');
       
       if (!success) {

@@ -9,6 +9,7 @@ class NostrProfile {
   final String? banner;
   final String? website;
   final String? nip05;
+  final String? lud06;
   final String? lud16;
   final DateTime? createdAt;
 
@@ -21,6 +22,7 @@ class NostrProfile {
     this.banner,
     this.website,
     this.nip05,
+    this.lud06,
     this.lud16,
     this.createdAt,
   });
@@ -63,6 +65,7 @@ class NostrProfile {
         banner: profileData['banner'] as String?,
         website: profileData['website'] as String?,
         nip05: profileData['nip05'] as String?,
+        lud06: profileData['lud06'] as String?,
         lud16: profileData['lud16'] as String?,
         createdAt: event['created_at'] != null 
             ? DateTime.fromMillisecondsSinceEpoch((event['created_at'] as int) * 1000)

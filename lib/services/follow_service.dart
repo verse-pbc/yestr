@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:dart_nostr/dart_nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
@@ -193,19 +192,25 @@ class FollowService {
         await _nostrService.connect();
       }
 
-      // Request contact list from relay
+      // Request contact list from relay using NDK
+      await _nostrService.connect();
+      
+      // Listen for contact list events
+      final subscription = _nostrService.eventsStream
+          .where((eventData) => eventData['kind'] == 3 && eventData['pubkey'] == currentUserPubkey);
+      
+      // Request contact list
       final filter = {
         'kinds': [3], // Contact list
         'authors': [currentUserPubkey],
         'limit': 1,
       };
-
-      // Subscribe to contact list events
-      final subscription = _nostrService.subscribeToSimpleFilter(filter);
+      
+      // Publish the subscription request through NDK
+      // Note: NDK handles subscriptions internally through its query mechanism
       
       // Listen for contact list
       await for (final eventData in subscription) {
-        if (eventData['kind'] == 3 && eventData['pubkey'] == currentUserPubkey) {
           // Clear existing followed profiles
           _followedProfiles.clear();
           
@@ -226,7 +231,6 @@ class FollowService {
           
           // Only process the latest contact list
           break;
-        }
       }
     } catch (e) {
       if (kDebugMode) {

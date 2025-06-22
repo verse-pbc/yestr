@@ -20,6 +20,10 @@ class RelayPool {
   final _eventController = StreamController<RelayEvent>.broadcast();
   
   Stream<RelayEvent> get eventStream => _eventController.stream;
+  List<WebSocketChannel> get channels => _connections.values
+      .where((conn) => conn.channel != null)
+      .map((conn) => conn.channel!)
+      .toList();
   
   /// Connect to all default relays
   Future<void> connectToDefaultRelays() async {
@@ -122,6 +126,8 @@ class RelayConnection {
   final Function(RelayEvent) onEvent;
   WebSocketChannel? _channel;
   StreamSubscription? _subscription;
+  
+  WebSocketChannel? get channel => _channel;
   
   RelayConnection({
     required this.url,

@@ -10,6 +10,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/follow_service.dart';
+import '../services/saved_profiles_service.dart';
 import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
 import '../widgets/app_drawer.dart';
@@ -26,6 +27,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
   final FollowService _followService = FollowService();
+  late final SavedProfilesService _savedProfilesService;
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
   int _currentIndex = 0;
@@ -33,6 +35,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize saved profiles service
+    _savedProfilesService = SavedProfilesService(_nostrService);
     // Set main background when screen loads
     WebBackgroundService.setMainBackground();
     _loadProfiles();
@@ -41,6 +45,13 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   Future<void> _loadProfiles() async {
     try {
       await _nostrService.connect();
+      
+      // Load saved profiles (service already listens to events internally)
+      await _savedProfilesService.loadSavedProfiles();
+      
+      // Manually request profiles
+      print('CardOverlayScreen: Manually requesting profiles...');
+      await _nostrService.requestProfilesWithLimit(limit: 100);
       
       // Special profile to insert at position 10
       const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
@@ -256,7 +267,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   @override
   void dispose() {
     controller.dispose();
-    _nostrService.disconnect();
+    // Don't dispose singleton services
     super.dispose();
   }
 
@@ -390,7 +401,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                   ),
                                 ),
-                              // Send DM overlay
+                              // Save overlay
                               if (verticalThresholdPercentage < -50)
                                 Positioned.fill(
                                   child: Container(
@@ -402,7 +413,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                     ),
                                     child: Center(
                                       child: Icon(
-                                        Icons.message,
+                                        Icons.bookmark,
                                         size: 100,
                                         color: Colors.white.withOpacity(
                                           ((verticalThresholdPercentage.abs() - 50) / 50).clamp(0.0, 1.0),
@@ -469,16 +480,11 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                                       () => controller.swipe(CardSwiperDirection.bottom),
                                     ),
                                     _buildIndicator(
-                                      Icons.message,
+                                      Icons.bookmark,
                                       'Up',
                                       Colors.blue,
-                                      'Send DM',
-                                      () {
-                                        // For Send DM, we need to get the current profile and show the composer
-                                        if (_profiles.isNotEmpty && _currentIndex < _profiles.length) {
-                                          _showMessageBottomSheet(context, _profiles[_currentIndex]);
-                                        }
-                                      },
+                                      'Save',
+                                      () => controller.swipe(CardSwiperDirection.top),
                                     ),
                                     _buildIndicator(
                                       Icons.person_add,
@@ -573,9 +579,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         _handleFollow(profile);
         break;
       case CardSwiperDirection.top:
-        action = 'Send DM';
-        // Show DM composer bottom sheet
-        _showMessageBottomSheet(context, profile);
+        action = 'Save';
+        // Save profile to bookmarks
+        _handleSaveProfile(profile);
         break;
       case CardSwiperDirection.bottom:
         action = 'Skip';
@@ -634,6 +640,32 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         );
       },
     );
+  }
+
+  Future<void> _handleSaveProfile(NostrProfile profile) async {
+    try {
+      final saved = await _savedProfilesService.saveProfile(profile.pubkey);
+      if (saved && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved ${profile.displayNameOrName}'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error saving profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save profile'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleFollow(NostrProfile profile) async {

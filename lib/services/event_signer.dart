@@ -4,9 +4,60 @@ import 'dart:math';
 import 'package:crypto/crypto.dart';
 import 'package:convert/convert.dart';
 import 'package:bip340/bip340.dart' as bip340;
+import 'key_management_service.dart';
 
 /// Helper class to sign Nostr events according to NIP-01
 class EventSigner {
+  final KeyManagementService _keyService = KeyManagementService();
+  
+  /// Sign an event using stored keys
+  Future<Map<String, dynamic>?> signEvent(Map<String, dynamic> eventData) async {
+    try {
+      final privateKey = await _keyService.getPrivateKey();
+      final publicKey = await _keyService.getPublicKey();
+      
+      if (privateKey == null || publicKey == null) {
+        print('EventSigner: No keys available');
+        return null;
+      }
+      
+      // Extract event fields
+      final kind = eventData['kind'] as int;
+      final tags = eventData['tags'] as List<List<String>>;
+      final content = eventData['content'] as String;
+      final createdAt = eventData['created_at'] as int;
+      
+      // Create the event structure for ID calculation
+      final eventForId = [
+        0, // Reserved
+        publicKey,
+        createdAt,
+        kind,
+        tags,
+        content,
+      ];
+      
+      // Calculate event ID
+      final eventId = _calculateEventId(eventForId);
+      
+      // Sign the event
+      final signature = _signEventId(eventId, privateKey);
+      
+      // Return complete signed event
+      return {
+        'id': eventId,
+        'pubkey': publicKey,
+        'created_at': createdAt,
+        'kind': kind,
+        'tags': tags,
+        'content': content,
+        'sig': signature,
+      };
+    } catch (e) {
+      print('EventSigner: Error signing event: $e');
+      return null;
+    }
+  }
   
   /// Create and sign an event according to NIP-01
   static Map<String, dynamic> createSignedEvent({

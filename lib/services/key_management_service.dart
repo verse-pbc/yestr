@@ -1,8 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:dart_nostr/dart_nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bech32/bech32.dart';
+import 'package:bip340/bip340.dart' as bip340;
 
 class KeyManagementService {
   static const String _privateKeyKey = 'nostr_private_key';
@@ -101,9 +101,7 @@ class KeyManagementService {
       }
       
       // Generate public key from private key
-      final publicKey = Nostr.instance.keysService.derivePublicKey(
-        privateKey: hexPrivateKey,
-      );
+      final publicKey = bip340.getPublicKey(hexPrivateKey);
       
       // Store both keys
       final prefs = await SharedPreferences.getInstance();
