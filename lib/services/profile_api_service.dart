@@ -99,7 +99,7 @@ class ProfileApiService {
         } else {
           // Direct profile data
           pubkey = data['pubkey'] as String? ?? data['id'] as String?;
-          content = data;
+          content = data as Map<String, dynamic>;
         }
       }
 
