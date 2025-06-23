@@ -52,27 +52,15 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       // Load saved profiles (service already listens to events internally)
       await _savedProfilesService.loadSavedProfiles();
       
-      // Check if we have cached profiles from prefetch
-      if (_profileApiService.cachedProfiles.isNotEmpty) {
-        print('CardOverlayScreen: Using ${_profileApiService.cachedProfiles.length} prefetched profiles');
-        setState(() {
-          _profiles = List.from(_profileApiService.cachedProfiles);
-          
-          // Insert special profile at position 10 if we have enough profiles
-          if (_profiles.length >= 10) {
-            _insertSpecialProfile();
-          }
-          
-          _isLoading = false;
-        });
-      } else {
-        // Fetch profiles if not already cached
-        print('CardOverlayScreen: Fetching fresh profiles...');
-        final profiles = await _profileApiService.fetchRandomProfiles(count: 50);
-        
-        if (mounted) {
+      bool apiSuccess = false;
+      
+      // Try to use API profiles first
+      try {
+        // Check if we have cached profiles from prefetch
+        if (_profileApiService.cachedProfiles.isNotEmpty) {
+          print('CardOverlayScreen: Using ${_profileApiService.cachedProfiles.length} prefetched profiles');
           setState(() {
-            _profiles = List.from(profiles);
+            _profiles = List.from(_profileApiService.cachedProfiles);
             
             // Insert special profile at position 10 if we have enough profiles
             if (_profiles.length >= 10) {
@@ -81,10 +69,71 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
             
             _isLoading = false;
           });
+          apiSuccess = true;
+        } else {
+          // Fetch profiles if not already cached
+          print('CardOverlayScreen: Fetching fresh profiles...');
+          final profiles = await _profileApiService.fetchRandomProfiles(count: 50);
+          
+          if (profiles.isNotEmpty && mounted) {
+            setState(() {
+              _profiles = List.from(profiles);
+              
+              // Insert special profile at position 10 if we have enough profiles
+              if (_profiles.length >= 10) {
+                _insertSpecialProfile();
+              }
+              
+              _isLoading = false;
+            });
+            apiSuccess = true;
+          }
+        }
+      } catch (apiError) {
+        print('CardOverlayScreen: API fetch failed: $apiError');
+        print('CardOverlayScreen: Falling back to Nostr relay profiles');
+      }
+      
+      // If API failed or returned no profiles, fall back to Nostr relay profiles
+      if (!apiSuccess) {
+        print('CardOverlayScreen: Using Nostr relay profiles as fallback');
+        
+        // Request profiles from Nostr relays
+        await _nostrService.requestProfilesWithLimit(limit: 100);
+        
+        // Listen for profiles from Nostr
+        _nostrService.profilesStream.listen((profile) {
+          if (mounted) {
+            setState(() {
+              // Add profiles up to a limit
+              if (_profiles.length < 50) {
+                _profiles.add(profile);
+                
+                // Insert special profile at position 10 if we have enough profiles
+                if (_profiles.length == 10) {
+                  _insertSpecialProfile();
+                }
+                
+                // Stop loading once we have enough profiles
+                if (_profiles.length >= 10) {
+                  _isLoading = false;
+                }
+              }
+            });
+          }
+        });
+        
+        // Wait a bit for profiles to load
+        await Future.delayed(const Duration(seconds: 3));
+        
+        if (mounted && _profiles.isEmpty) {
+          setState(() {
+            _isLoading = false;
+          });
         }
       }
       
-      // Listen for any new profile fetches
+      // Listen for any new API profile fetches
       _profileApiService.profilesStream.listen((profiles) {
         if (mounted && _profiles.isEmpty) {
           setState(() {
@@ -638,14 +687,26 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   Future<void> _loadMoreProfiles() async {
     try {
       print('CardOverlayScreen: Loading more profiles...');
-      final newProfiles = await _profileApiService.fetchRandomProfiles(count: 30);
       
-      if (mounted && newProfiles.isNotEmpty) {
-        setState(() {
-          // Add new profiles at the end
-          _profiles.addAll(newProfiles);
-        });
+      try {
+        // Try API first
+        final newProfiles = await _profileApiService.fetchRandomProfiles(count: 30);
+        
+        if (mounted && newProfiles.isNotEmpty) {
+          setState(() {
+            // Add new profiles at the end
+            _profiles.addAll(newProfiles);
+          });
+          return;
+        }
+      } catch (apiError) {
+        print('CardOverlayScreen: API fetch failed for more profiles: $apiError');
       }
+      
+      // Fallback to requesting more from Nostr if API fails
+      print('CardOverlayScreen: Falling back to Nostr for more profiles');
+      await _nostrService.requestProfilesWithLimit(limit: 50);
+      
     } catch (e) {
       print('Error loading more profiles: $e');
     }

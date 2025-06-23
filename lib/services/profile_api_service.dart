@@ -29,7 +29,10 @@ class ProfileApiService {
       
       final response = await http.get(
         Uri.parse('$_baseUrl?count=$count'),
-        headers: {'Accept': 'application/json'},
+        headers: {
+          'Accept': 'application/json',
+          'Content-Type': 'application/json',
+        },
       ).timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
