@@ -11,6 +11,7 @@ import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
 import '../../widgets/dm_composer.dart';
+import '../../widgets/image_lightbox.dart';
 import '../../utils/cors_helper.dart';
 import '../../widgets/gradient_background.dart';
 
@@ -75,52 +76,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             flexibleSpace: FlexibleSpaceBar(
               title: Text(widget.profile.displayNameOrName),
-              background: Stack(
-                fit: StackFit.expand,
-                children: [
-                  // Profile image
-                  widget.profile.picture != null
-                      ? CachedNetworkImage(
-                          imageUrl: CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
-                          fit: BoxFit.cover,
-                          httpHeaders: const {
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.9',
-                            'Referer': 'https://yestr.app/',
-                          },
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              color: Colors.grey[300],
-                              child: const Center(
-                                child: Icon(Icons.error, size: 50),
-                              ),
-                            );
-                          },
-                        )
-                      : Container(
-                          color: Colors.grey[300],
-                          child: const Center(
-                            child: Icon(Icons.person, size: 120),
+              background: GestureDetector(
+                onTap: widget.profile.picture != null
+                    ? () {
+                        Navigator.of(context).push(
+                          PageRouteBuilder(
+                            opaque: false,
+                            barrierColor: Colors.black.withOpacity(0.9),
+                            pageBuilder: (context, animation, secondaryAnimation) {
+                              return FadeTransition(
+                                opacity: animation,
+                                child: ImageLightbox(
+                                  imageUrl: widget.profile.picture!,
+                                  heroTag: 'profile-image-${widget.profile.pubkey}',
+                                ),
+                              );
+                            },
                           ),
-                        ),
-                  // Gradient overlay (same as ProfileCard)
-                  Positioned.fill(
-                    child: Container(
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topCenter,
-                          end: Alignment.bottomCenter,
-                          colors: [
-                            Colors.transparent,
-                            Colors.black.withOpacity(0.7),
-                          ],
-                          stops: const [0.6, 1.0],
+                        );
+                      }
+                    : null,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Profile image
+                    widget.profile.picture != null
+                        ? Hero(
+                            tag: 'profile-image-${widget.profile.pubkey}',
+                            child: CachedNetworkImage(
+                              imageUrl: CorsHelper.wrapWithCorsProxy(widget.profile.picture!),
+                              fit: BoxFit.cover,
+                              httpHeaders: const {
+                                'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                                'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
+                                'Accept-Language': 'en-US,en;q=0.9',
+                                'Referer': 'https://yestr.app/',
+                              },
+                              errorWidget: (context, url, error) {
+                                return Container(
+                                  color: Colors.grey[300],
+                                  child: const Center(
+                                    child: Icon(Icons.error, size: 50),
+                                  ),
+                                );
+                              },
+                            ),
+                          )
+                        : Container(
+                            color: Colors.grey[300],
+                            child: const Center(
+                              child: Icon(Icons.person, size: 120),
+                            ),
+                          ),
+                    // Gradient overlay (same as ProfileCard)
+                    Positioned.fill(
+                      child: Container(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withOpacity(0.7),
+                            ],
+                            stops: const [0.6, 1.0],
+                          ),
                         ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
             actions: [
