@@ -13,8 +13,8 @@ class ReactionService {
   Future<bool> likePost(NostrEvent targetEvent) async {
     try {
       // Check if user is logged in
-      final privateKeyHex = await _keyService.getPrivateKeyHex();
-      final publicKeyHex = await _keyService.getPublicKeyHex();
+      final privateKeyHex = await _keyService.getPrivateKey();
+      final publicKeyHex = await _keyService.getPublicKey();
       
       if (privateKeyHex == null || publicKeyHex == null) {
         print('ReactionService: User not logged in');
@@ -74,7 +74,7 @@ class ReactionService {
   // Check if current user has liked a specific event
   Future<bool> hasUserLiked(String eventId) async {
     try {
-      final publicKeyHex = await _keyService.getPublicKeyHex();
+      final publicKeyHex = await _keyService.getPublicKey();
       if (publicKeyHex == null) return false;
 
       // TODO: Query for existing reaction from current user
