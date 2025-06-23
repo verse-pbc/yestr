@@ -16,6 +16,7 @@ import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
+import '../widgets/gradient_background.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -353,10 +354,12 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   @override
   Widget build(BuildContext context) {
     print('CardOverlayScreen: Building widget - isLoading: $_isLoading, profiles: ${_profiles.length}');
-    return Scaffold(
-      drawerScrimColor: Colors.black.withOpacity(0.6), // Dim background when drawer is open
-      drawer: AppDrawer(),
-      body: Stack(
+    return GradientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent, // Make scaffold transparent to show gradient
+        drawerScrimColor: Colors.black.withOpacity(0.6), // Dim background when drawer is open
+        drawer: AppDrawer(),
+        body: Stack(
         children: [
           // App bar layer (bottom layer - lowest z-index)
           Positioned(
@@ -365,7 +368,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
             right: 0,
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).primaryColor,
+                color: Colors.transparent, // Make app bar transparent to show gradient
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -584,6 +587,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                   ),
           ),
         ],
+      ),
       ),
     );
   }

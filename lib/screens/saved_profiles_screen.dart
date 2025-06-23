@@ -9,6 +9,7 @@ import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
+import '../widgets/gradient_background.dart';
 
 class SavedProfilesScreen extends StatefulWidget {
   const SavedProfilesScreen({super.key});
@@ -84,10 +85,12 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawerScrimColor: Colors.black.withOpacity(0.6),
-      drawer: AppDrawer(),
-      body: Stack(
+    return GradientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        drawerScrimColor: Colors.black.withOpacity(0.6),
+        drawer: AppDrawer(),
+        body: Stack(
         children: [
           // App bar layer (bottom layer - lowest z-index)
           Positioned(
@@ -96,7 +99,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
             right: 0,
             child: Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).appBarTheme.backgroundColor ?? Theme.of(context).primaryColor,
+                color: Colors.transparent,
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -320,6 +323,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
                       ),
           ),
         ],
+      ),
       ),
     );
   }

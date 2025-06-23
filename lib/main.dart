@@ -20,7 +20,7 @@ class MyApp extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1a1c22),
+        scaffoldBackgroundColor: Colors.transparent,
         colorScheme: const ColorScheme.dark(
           primary: Colors.pink,
           secondary: Colors.pinkAccent,
@@ -31,14 +31,14 @@ class MyApp extends StatelessWidget {
           color: Color(0xFF2c2c37),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1a1c22),
+          backgroundColor: Colors.transparent,
           elevation: 0,
         ),
         useMaterial3: true,
       ),
       darkTheme: ThemeData(
         brightness: Brightness.dark,
-        scaffoldBackgroundColor: const Color(0xFF1a1c22),
+        scaffoldBackgroundColor: Colors.transparent,
         colorScheme: const ColorScheme.dark(
           primary: Colors.pink,
           secondary: Colors.pinkAccent,
@@ -49,7 +49,7 @@ class MyApp extends StatelessWidget {
           color: Color(0xFF2c2c37),
         ),
         appBarTheme: const AppBarTheme(
-          backgroundColor: Color(0xFF1a1c22),
+          backgroundColor: Colors.transparent,
           elevation: 0,
         ),
         useMaterial3: true,
