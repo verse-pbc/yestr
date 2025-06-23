@@ -368,12 +368,13 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
             right: 0,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.transparent, // Make app bar transparent to show gradient
+                color: const Color(0xFF1a1c22), // Dark background for app bar
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withOpacity(0.2),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),

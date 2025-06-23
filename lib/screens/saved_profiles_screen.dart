@@ -99,12 +99,13 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
             right: 0,
             child: Container(
               decoration: BoxDecoration(
-                color: Colors.transparent,
+                color: const Color(0xFF1a1c22),
                 boxShadow: [
                   BoxShadow(
-                    color: Colors.black.withOpacity(0.1),
-                    blurRadius: 4,
-                    offset: const Offset(0, 2),
+                    color: Colors.black.withOpacity(0.2),
+                    spreadRadius: 2,
+                    blurRadius: 8,
+                    offset: const Offset(0, 4),
                   ),
                 ],
               ),
