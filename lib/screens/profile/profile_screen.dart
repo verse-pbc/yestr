@@ -8,6 +8,7 @@ import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
 import '../../widgets/dm_composer.dart';
 import '../../utils/cors_helper.dart';
+import '../../widgets/gradient_background.dart';
 
 class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
@@ -34,8 +35,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: CustomScrollView(
+    return GradientBackground(
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: CustomScrollView(
         slivers: [
           SliverAppBar(
             expandedHeight: 300.0,
@@ -299,6 +302,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _showMessageBottomSheet(context);
         },
         child: const Icon(Icons.message),
+      ),
       ),
     );
   }
