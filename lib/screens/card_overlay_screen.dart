@@ -442,7 +442,13 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
                           ) =>
                               Stack(
                             children: [
-                              ProfileCard(profile: _profiles[index]),
+                              ProfileCard(
+                                profile: _profiles[index],
+                                onSkip: () {
+                                  // Skip to the next card
+                                  controller.swipe(CardSwiperDirection.bottom);
+                                },
+                              ),
                               // Follow overlay
                               if (horizontalThresholdPercentage > 50)
                                 Positioned.fill(

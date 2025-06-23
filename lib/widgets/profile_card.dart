@@ -6,10 +6,12 @@ import '../utils/cors_helper.dart';
 
 class ProfileCard extends StatelessWidget {
   final NostrProfile profile;
+  final VoidCallback? onSkip;
 
   const ProfileCard({
     super.key,
     required this.profile,
+    this.onSkip,
   });
 
   @override
@@ -19,7 +21,10 @@ class ProfileCard extends StatelessWidget {
         Navigator.push(
           context,
           MaterialPageRoute(
-            builder: (context) => ProfileScreen(profile: profile),
+            builder: (context) => ProfileScreen(
+              profile: profile,
+              onSkip: onSkip,
+            ),
           ),
         );
       },

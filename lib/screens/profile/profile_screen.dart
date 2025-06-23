@@ -6,6 +6,7 @@ import '../../services/nostr_service.dart';
 import '../../services/reaction_service.dart';
 import '../../services/key_management_service.dart';
 import '../../services/saved_profiles_service.dart';
+import '../../services/follow_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
@@ -15,10 +16,12 @@ import '../../widgets/gradient_background.dart';
 
 class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
+  final VoidCallback? onSkip;
 
   const ProfileScreen({
     super.key,
     required this.profile,
+    this.onSkip,
   });
 
   @override
@@ -29,7 +32,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final NostrService _nostrService = NostrService();
   final ReactionService _reactionService = ReactionService();
   final KeyManagementService _keyService = KeyManagementService();
-  final SavedProfilesService _savedProfilesService = SavedProfilesService();
+  final FollowService _followService = FollowService();
+  late final SavedProfilesService _savedProfilesService;
   Future<List<NostrEvent>>? _notesFuture;
   final Set<String> _likedNotes = {}; // Track liked notes locally
   final Map<String, bool> _likingInProgress = {}; // Track ongoing like operations
@@ -39,6 +43,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
+    // Initialize saved profiles service with NostrService instance
+    _savedProfilesService = SavedProfilesService(_nostrService);
     print('ProfileScreen: Loading notes for ${widget.profile.displayNameOrName} (${widget.profile.pubkey})');
     _notesFuture = _nostrService.getUserNotes(widget.profile.pubkey, limit: 10);
   }
@@ -161,6 +167,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           Colors.yellow,
                           () {
                             Navigator.of(context).pop();
+                            // Call the skip callback if provided
+                            if (widget.onSkip != null) {
+                              widget.onSkip!();
+                            }
                           },
                         ),
                         _buildActionIndicator(
@@ -176,28 +186,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           'Follow',
                           Colors.green,
                           () async {
-                            final hasKey = await _keyService.hasPrivateKey();
-                            if (!hasKey) {
-                              if (mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  const SnackBar(
-                                    content: Text('Please login to follow users'),
-                                    backgroundColor: Colors.orange,
-                                  ),
-                                );
-                              }
-                              return;
-                            }
-                            
-                            // TODO: Implement follow functionality
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Follow functionality coming soon!'),
-                                  backgroundColor: Colors.blue,
-                                ),
-                              );
-                            }
+                            await _handleFollow();
                           },
                         ),
                       ],
@@ -713,6 +702,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
           const SnackBar(
             content: Text('Failed to save profile'),
             duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _handleFollow() async {
+    try {
+      final success = await _followService.followProfile(widget.profile.pubkey);
+      
+      if (success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Following ${widget.profile.displayNameOrName}'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      } else if (!success && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Follow failed. Please login to follow users.'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error following user: $e'),
             backgroundColor: Colors.red,
           ),
         );
