@@ -25,6 +25,7 @@ class ProfileCard extends StatelessWidget {
       },
       child: Container(
       decoration: BoxDecoration(
+        color: const Color(0xFF070809), // Dark background color
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
