@@ -186,7 +186,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
                               cardsCount: _profiles.length,
                               onSwipe: _onSwipe,
                               onUndo: _onUndo,
-                              numberOfCardsDisplayed: 3,
+                              numberOfCardsDisplayed: _profiles.length >= 3 ? 3 : _profiles.length,
                               backCardOffset: const Offset(40, 40),
                               padding: const EdgeInsets.only(
                                 left: 24.0,
@@ -375,6 +375,11 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
     int? currentIndex,
     CardSwiperDirection direction,
   ) {
+    if (previousIndex >= _profiles.length) {
+      print('Invalid index: $previousIndex, profiles count: ${_profiles.length}');
+      return false;
+    }
+    
     final profile = _profiles[previousIndex];
     
     // Update current index
@@ -388,8 +393,10 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
     switch (direction) {
       case CardSwiperDirection.left:
         action = 'Remove';
-        // Remove from saved profiles
-        _handleRemoveProfile(profile);
+        // Delay the removal to allow the swipe animation to complete
+        Future.delayed(const Duration(milliseconds: 300), () {
+          _handleRemoveProfile(profile);
+        });
         break;
       case CardSwiperDirection.right:
         action = 'Follow';
@@ -427,10 +434,22 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
     try {
       final removed = await _savedProfilesService.removeProfile(profile.pubkey);
       if (removed && mounted) {
-        // Remove from local list
-        setState(() {
-          _profiles.removeWhere((p) => p.pubkey == profile.pubkey);
-        });
+        // Check if this is the last card
+        if (_profiles.length == 1) {
+          // If it's the last card, just clear the list
+          setState(() {
+            _profiles.clear();
+          });
+        } else {
+          // Remove from local list
+          setState(() {
+            _profiles.removeWhere((p) => p.pubkey == profile.pubkey);
+            // Reset current index if needed
+            if (_currentIndex >= _profiles.length) {
+              _currentIndex = _profiles.length - 1;
+            }
+          });
+        }
         
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

@@ -1,412 +1,348 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:dart_nostr/dart_nostr.dart' as dart_nostr;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:dart_nostr/dart_nostr.dart' as nostr;
 import '../models/nostr_profile.dart';
-import '../models/nostr_event.dart' as local;
-import 'relay_pool.dart';
+import '../models/nostr_event.dart';
+import 'key_management_service.dart';
+import 'event_signer.dart';
 
 class NostrService {
-  static const String relayUrl = 'wss://relay.yestr.social';
-  WebSocketChannel? _channel;
-  final RelayPool _relayPool = RelayPool();
+  // Singleton instance
+  static final NostrService _instance = NostrService._internal();
+  factory NostrService() => _instance;
+  NostrService._internal();
+  
+  final KeyManagementService _keyService = KeyManagementService();
+  final EventSigner _eventSigner = EventSigner();
   final _profilesController = StreamController<NostrProfile>.broadcast();
+  final _eventsController = StreamController<Map<String, dynamic>>.broadcast();
   final List<NostrProfile> _profiles = [];
-  String? _subscriptionId;
-  StreamSubscription? _relayEventSubscription;
+  StreamSubscription? _profileSubscription;
+  bool _isConnected = false;
+  final List<WebSocketChannel> _channels = [];
+  final List<String> _relayUrls = [
+    'wss://relay.damus.io',
+    'wss://relay.primal.net',
+    'wss://nos.lol',
+    'wss://relay.nostr.band',
+    'wss://relay.yestr.social',
+  ];
 
   Stream<NostrProfile> get profilesStream => _profilesController.stream;
+  Stream<Map<String, dynamic>> get eventsStream => _eventsController.stream;
   List<NostrProfile> get profiles => List.unmodifiable(_profiles);
-  bool get isConnected => _channel != null || _relayPool.isConnected;
+  bool get isConnected => _isConnected;
+  List<WebSocketChannel> get channels => _channels;
 
   Future<void> connect() async {
+    if (_isConnected) {
+      print('NostrService: Already connected');
+      return;
+    }
+    
     try {
-      // Connect to single relay for backward compatibility
-      _channel = WebSocketChannel.connect(Uri.parse(relayUrl));
-      print('Connected to relay: $relayUrl');
-      
-      // Listen to messages from relay
-      _channel!.stream.listen(
-        _handleMessage,
-        onError: (error) {
-          print('WebSocket error: $error');
-        },
-        onDone: () {
-          print('WebSocket connection closed');
-        },
-      );
-
-      // Also connect to relay pool
       await connectToMultipleRelays();
-
-      // Request profiles
+      _isConnected = true;
+      
+      // Request profiles after connection
       await _requestProfiles();
     } catch (e) {
-      print('Connection error: $e');
+      print('NostrService: Connection error: $e');
+      _isConnected = false;
       rethrow;
     }
   }
   
-  /// Connect to multiple relays for better reliability
-  Future<void> connectToMultipleRelays() async {
-    try {
-      // Connect to default relays
-      await _relayPool.connectToDefaultRelays();
-      
-      // Listen to events from all relays
-      _relayEventSubscription = _relayPool.eventStream.listen((relayEvent) {
-        if (relayEvent.event != null) {
-          // Handle events from relay pool
-          _handleEventFromPool(relayEvent.event!);
+  void _setupEventListeners() {
+    for (final channel in _channels) {
+      channel.stream.listen((message) {
+        try {
+          final data = jsonDecode(message as String) as List<dynamic>;
+          if (data.length >= 3 && data[0] == 'EVENT') {
+            final eventData = data[2] as Map<String, dynamic>;
+            _handleEvent(eventData);
+          } else if (data[0] == 'EOSE') {
+            // End of stored events
+            print('NostrService: End of stored events for subscription ${data[1]}');
+          } else if (data[0] == 'NOTICE') {
+            print('NostrService: Relay notice: ${data[1]}');
+          }
+        } catch (e) {
+          print('Error processing message: $e');
+          print('Raw message: $message');
         }
       });
-      
-      print('Connected to ${_relayPool.connectedRelays.length} relays');
-    } catch (e) {
-      print('Error connecting to relay pool: $e');
     }
   }
   
-  void _handleEventFromPool(Map<String, dynamic> eventData) {
-    // This handles events from the relay pool
-    // Similar to _handleEvent but for multiple relays
-    try {
-      if (eventData['kind'] == 0) {
-        final profile = NostrProfile.fromNostrEvent(eventData);
-        
-        // Avoid duplicates by checking pubkey
-        if (!_profiles.any((p) => p.pubkey == profile.pubkey)) {
-          if (profile.picture != null && 
-              (profile.name != null || profile.displayName != null)) {
-            _profiles.add(profile);
-            _profilesController.add(profile);
-          }
-        }
-      }
-    } catch (e) {
-      // Ignore parsing errors
+  void _handleEvent(Map<String, dynamic> eventData) {
+    final kind = eventData['kind'] as int;
+    
+    // Debug: log all kind 1 events
+    if (kind == 1) {
+      print('NostrService: Received kind 1 event from ${eventData['pubkey']?.substring(0, 8)}...');
     }
+    
+    if (kind == 0) {
+      // Profile metadata
+      final profile = NostrProfile.fromNostrEvent(eventData);
+      if (!_profiles.any((p) => p.pubkey == profile.pubkey)) {
+        _profiles.add(profile);
+        _profilesController.add(profile);
+      }
+    }
+    
+    // Emit all events to the events stream
+    _eventsController.add(eventData);
   }
 
   Future<void> _requestProfiles() async {
-    _subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
-    
-    // Create a REQ message for kind 0 (profile) events
-    final request = [
-      "REQ",
-      _subscriptionId,
-      {
-        "kinds": [0],
-        "limit": 100,
-      }
-    ];
-
-    final requestJson = jsonEncode(request);
-    _channel?.sink.add(requestJson);
-    print('Sent profile request: $requestJson');
-  }
-
-  void _handleMessage(dynamic message) {
     try {
-      final data = jsonDecode(message as String) as List<dynamic>;
+      print('NostrService: Requesting profiles...');
       
-      if (data.length < 2) return;
-
-      final type = data[0] as String;
-      
-      switch (type) {
-        case 'EVENT':
-          if (data.length >= 3) {
-            final eventData = data[2] as Map<String, dynamic>;
-            _handleEvent(eventData);
-          }
-          break;
-        case 'EOSE':
-          print('End of stored events for subscription: ${data[1]}');
-          break;
-        case 'NOTICE':
-          print('Relay notice: ${data[1]}');
-          break;
-      }
-    } catch (e) {
-      print('Error handling message: $e');
-    }
-  }
-
-  void _handleEvent(Map<String, dynamic> eventData) {
-    try {
-      if (eventData['kind'] == 0) {
-        final profile = NostrProfile.fromNostrEvent(eventData);
-        
-        // Only add profiles with at least a name and picture
-        if (profile.picture != null && 
-            (profile.name != null || profile.displayName != null)) {
-          _profiles.add(profile);
-          _profilesController.add(profile);
-          print('Added profile: ${profile.displayNameOrName}');
-          
-          // Stop after getting 10 good profiles
-          if (_profiles.length >= 10) {
-            closeSubscription();
-          }
-        }
-      }
-    } catch (e) {
-      print('Error handling event: $e');
-    }
-  }
-
-  void closeSubscription() {
-    if (_subscriptionId != null) {
-      final closeRequest = ["CLOSE", _subscriptionId];
-      _channel?.sink.add(jsonEncode(closeRequest));
-      print('Closed subscription: $_subscriptionId');
-    }
-  }
-
-  void disconnect() {
-    closeSubscription();
-    _channel?.sink.close();
-    _profilesController.close();
-    _profiles.clear();
-  }
-
-  /// Publish an event to all connected relays
-  Future<Map<String, bool>> publishEvent(Map<String, dynamic> eventData) async {
-    final results = <String, bool>{};
-    
-    // Publish to relay pool (multiple relays)
-    if (_relayPool.isConnected) {
-      final poolResults = await _relayPool.publishEvent(eventData);
-      results.addAll(poolResults);
-    }
-    
-    // Also publish to single relay for backward compatibility
-    if (_channel != null) {
-      try {
-        // Create EVENT message
-        final message = [
-          "EVENT",
-          eventData,
-        ];
-
-        final messageJson = jsonEncode(message);
-        _channel!.sink.add(messageJson);
-        results[relayUrl] = true;
-      } catch (e) {
-        results[relayUrl] = false;
-        print('Error publishing to $relayUrl: $e');
-      }
-    }
-    
-    print('Published event ${eventData['id']} to ${results.values.where((v) => v).length}/${results.length} relays');
-    print('Event kind: ${eventData['kind']}');
-    
-    return results;
-  }
-
-  /// Subscribe to events matching a filter - simplified version
-  Stream<Map<String, dynamic>> subscribeToSimpleFilter(Map<String, dynamic> filter) {
-    if (_channel == null) {
-      throw Exception('Not connected to relay');
-    }
-
-    final controller = StreamController<Map<String, dynamic>>.broadcast();
-    final subscriptionId = DateTime.now().millisecondsSinceEpoch.toString();
-
-    // Listen for events
-    StreamSubscription? subscription;
-    subscription = _channel!.stream.listen(
-      (message) {
-        try {
-          final data = jsonDecode(message as String) as List<dynamic>;
-          
-          if (data.length < 2) return;
-          
-          final type = data[0] as String;
-          
-          if (type == 'EVENT' && data[1] == subscriptionId && data.length >= 3) {
-            final eventData = data[2] as Map<String, dynamic>;
-            controller.add(eventData);
-          } else if (type == 'EOSE' && data[1] == subscriptionId) {
-            // End of stored events
-            controller.close();
-            subscription?.cancel();
-          }
-        } catch (e) {
-          print('Error in subscription: $e');
-        }
-      },
-      onError: (error) {
-        controller.addError(error);
-        controller.close();
-      },
-      onDone: () {
-        controller.close();
-      },
-    );
-
-    // Send subscription request
-    final request = [
-      "REQ",
-      subscriptionId,
-      filter,
-    ];
-    
-    _channel!.sink.add(jsonEncode(request));
-    
-    // Cleanup on stream cancellation
-    controller.onCancel = () {
-      final closeRequest = ["CLOSE", subscriptionId];
-      _channel?.sink.add(jsonEncode(closeRequest));
-      subscription?.cancel();
-    };
-
-    return controller.stream;
-  }
-
-  Future<List<local.NostrEvent>> getUserNotes(String pubkey, {int limit = 10}) async {
-    print('getUserNotes called for pubkey: $pubkey, limit: $limit');
-    
-    // Use multiple popular relays to ensure we get notes
-    final relays = [
-      'wss://relay.damus.io',
-      'wss://relay.primal.net',
-      'wss://nos.lol',
-      'wss://relay.nostr.band',
-      relayUrl, // Also include yestr relay
-    ];
-    
-    final allNotes = <String, local.NostrEvent>{};
-    final futures = <Future<void>>[];
-    
-    for (final relay in relays) {
-      futures.add(_fetchNotesFromRelay(relay, pubkey, limit * 2, allNotes));
-    }
-    
-    // Wait for all relays to respond or timeout
-    await Future.wait(futures, eagerError: false);
-    
-    // Sort notes by creation time (newest first)
-    final sortedNotes = allNotes.values.toList()
-      ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
-    
-    print('Total unique notes found: ${sortedNotes.length}');
-    
-    // Return requested limit
-    return sortedNotes.take(limit).toList();
-  }
-  
-  Future<void> _fetchNotesFromRelay(
-    String relayUrl,
-    String pubkey,
-    int limit,
-    Map<String, local.NostrEvent> allNotes,
-  ) async {
-    try {
-      print('Fetching notes from relay: $relayUrl');
-      
-      final completer = Completer<void>();
-      final subscriptionId = '${DateTime.now().millisecondsSinceEpoch}_${relayUrl.hashCode}';
-      
-      // Create a new WebSocket connection for this relay
-      final channel = WebSocketChannel.connect(Uri.parse(relayUrl));
-      
-      StreamSubscription? subscription;
-      Timer? timeout;
-      int notesFromThisRelay = 0;
-      
-      void cleanup() {
-        subscription?.cancel();
-        timeout?.cancel();
-        try {
-          final closeRequest = ["CLOSE", subscriptionId];
-          channel.sink.add(jsonEncode(closeRequest));
-          channel.sink.close();
-        } catch (e) {
-          // Ignore cleanup errors
-        }
-      }
-      
-      subscription = channel.stream.listen(
-        (message) {
-          try {
-            final data = jsonDecode(message as String) as List<dynamic>;
-            
-            if (data.length < 2) return;
-            
-            final type = data[0] as String;
-            
-            switch (type) {
-              case 'EVENT':
-                if (data.length >= 3) {
-                  final eventData = data[2] as Map<String, dynamic>;
-                  if (eventData['kind'] == 1) {
-                    final event = local.NostrEvent.fromJson(eventData);
-                    allNotes[event.id] = event;
-                    notesFromThisRelay++;
-                  }
-                }
-                break;
-              case 'EOSE':
-                if (data[1] == subscriptionId) {
-                  print('Relay $relayUrl: Got $notesFromThisRelay notes');
-                  cleanup();
-                  if (!completer.isCompleted) {
-                    completer.complete();
-                  }
-                }
-                break;
-              case 'NOTICE':
-                print('Relay $relayUrl notice: ${data[1]}');
-                break;
-            }
-          } catch (e) {
-            print('Error handling message from $relayUrl: $e');
-          }
-        },
-        onError: (error) {
-          print('WebSocket error from $relayUrl: $error');
-          cleanup();
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-        onDone: () {
-          cleanup();
-          if (!completer.isCompleted) {
-            completer.complete();
-          }
-        },
-      );
-      
-      // Set timeout for this relay
-      timeout = Timer(const Duration(seconds: 3), () {
-        print('Timeout for relay: $relayUrl');
-        cleanup();
-        if (!completer.isCompleted) {
-          completer.complete();
-        }
-      });
-      
-      // Request notes from the user
+      final subscriptionId = 'profiles_${DateTime.now().millisecondsSinceEpoch}';
       final request = [
         "REQ",
         subscriptionId,
         {
-          "kinds": [1],
+          "kinds": [0],
+          "limit": 100,
+        }
+      ];
+      
+      // Send request to all channels
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(request));
+      }
+      
+      print('NostrService: Sent profile request to ${_channels.length} relays');
+    } catch (e) {
+      print('NostrService: Error requesting profiles: $e');
+    }
+  }
+
+  Future<void> requestProfilesWithLimit({
+    int limit = 50,
+    List<String>? authors,
+  }) async {
+    try {
+      print('NostrService: Requesting profiles with limit $limit');
+      
+      // Clear existing profiles
+      _profiles.clear();
+      
+      final subscriptionId = 'profiles_limit_${DateTime.now().millisecondsSinceEpoch}';
+      final filter = {
+        "kinds": [0],
+        "limit": limit,
+      };
+      
+      if (authors != null && authors.isNotEmpty) {
+        filter["authors"] = authors;
+      }
+      
+      final request = [
+        "REQ",
+        subscriptionId,
+        filter,
+      ];
+      
+      // Send request to all channels
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(request));
+      }
+      
+      print('NostrService: Sent limited profile request to ${_channels.length} relays');
+    } catch (e) {
+      print('NostrService: Error requesting profiles: $e');
+    }
+  }
+
+  Future<NostrProfile?> getProfile(String pubkey) async {
+    try {
+      // First check cache
+      final cached = _profiles.firstWhere(
+        (p) => p.pubkey == pubkey,
+        orElse: () => NostrProfile(
+          pubkey: pubkey,
+          name: null,
+          displayName: null,
+          about: null,
+          picture: null,
+          banner: null,
+          nip05: null,
+          lud06: null,
+          lud16: null,
+          website: null,
+        ),
+      );
+      
+      // Return cached if valid
+      if (cached.name != null || cached.displayName != null) {
+        return cached;
+      }
+      
+      // Query for latest profile
+      final subscriptionId = 'profile_${DateTime.now().millisecondsSinceEpoch}';
+      final request = [
+        "REQ",
+        subscriptionId,
+        {
+          "kinds": [0],
+          "authors": [pubkey],
+          "limit": 1,
+        }
+      ];
+      
+      // Send request to all channels
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(request));
+      }
+      
+      // Wait a bit for response
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // Check if profile was received
+      final updated = _profiles.firstWhere(
+        (p) => p.pubkey == pubkey,
+        orElse: () => cached,
+      );
+      
+      return updated.name != null ? updated : null;
+    } catch (e) {
+      print('NostrService: Error getting profile: $e');
+      return null;
+    }
+  }
+
+  Future<List<NostrEvent>> getUserNotes(String pubkey, {int limit = 20}) async {
+    try {
+      print('NostrService: Getting notes for user $pubkey');
+      final subscriptionId = 'notes_${DateTime.now().millisecondsSinceEpoch}';
+      final request = [
+        "REQ",
+        subscriptionId,
+        {
+          "kinds": [1], // Text notes
           "authors": [pubkey],
           "limit": limit,
         }
       ];
       
-      final requestJson = jsonEncode(request);
-      channel.sink.add(requestJson);
-      print('Sent request to $relayUrl: $requestJson');
+      final notes = <NostrEvent>[];
+      final completer = Completer<List<NostrEvent>>();
       
-      await completer.future;
+      // Set up temporary listener for notes BEFORE sending request
+      StreamSubscription? subscription;
+      subscription = _eventsController.stream.listen((eventData) {
+        if (eventData['kind'] == 1 && eventData['pubkey'] == pubkey) {
+          try {
+            final event = NostrEvent.fromJson(eventData);
+            notes.add(event);
+            print('NostrService: Received note ${notes.length}/${limit} from ${pubkey.substring(0, 8)}...');
+          } catch (e) {
+            print('NostrService: Error parsing note event: $e');
+          }
+        }
+      });
+      
+      // Small delay to ensure listener is ready
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Send request to all channels
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(request));
+      }
+      print('NostrService: Sent notes request to ${_channels.length} relays');
+      
+      // Wait for responses with timeout
+      Timer(const Duration(seconds: 3), () {
+        subscription?.cancel();
+        
+        // Send CLOSE to all channels
+        final closeRequest = ["CLOSE", subscriptionId];
+        for (final channel in _channels) {
+          channel.sink.add(jsonEncode(closeRequest));
+        }
+        
+        if (!completer.isCompleted) {
+          // Sort by created_at descending (newest first)
+          notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          print('NostrService: Returning ${notes.length} notes for $pubkey');
+          completer.complete(notes);
+        }
+      });
+      
+      return await completer.future;
     } catch (e) {
-      print('Error connecting to relay $relayUrl: $e');
+      print('NostrService: Error getting user notes: $e');
+      return [];
     }
+  }
+
+  Future<bool> publishEvent(Map<String, dynamic> eventData) async {
+    try {
+      // Add created_at if not present
+      if (!eventData.containsKey('created_at')) {
+        eventData['created_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      }
+      
+      // Sign the event
+      final signedEvent = await _eventSigner.signEvent(eventData);
+      if (signedEvent == null) {
+        throw Exception('Failed to sign event');
+      }
+      
+      final message = [
+        "EVENT",
+        signedEvent,
+      ];
+      
+      // Send to all channels
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(message));
+      }
+      
+      print('NostrService: Published event with id: ${signedEvent['id']}');
+      return true;
+    } catch (e) {
+      print('NostrService: Error publishing event: $e');
+      return false;
+    }
+  }
+
+  Future<void> connectToMultipleRelays() async {
+    for (final url in _relayUrls) {
+      try {
+        final channel = WebSocketChannel.connect(Uri.parse(url));
+        _channels.add(channel);
+        print('NostrService: Connected to $url');
+      } catch (e) {
+        print('NostrService: Failed to connect to $url: $e');
+      }
+    }
+    
+    if (_channels.isNotEmpty) {
+      _setupEventListeners();
+    }
+  }
+
+  void disconnect() {
+    _profileSubscription?.cancel();
+    for (final channel in _channels) {
+      channel.sink.close();
+    }
+    _channels.clear();
+    _profiles.clear();
+    _isConnected = false;
+    print('NostrService: Disconnected');
+  }
+
+  
+  void dispose() {
+    _profilesController.close();
+    _eventsController.close();
+    disconnect();
   }
 }
