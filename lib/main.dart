@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'widgets/responsive_wrapper.dart';
+import 'services/profile_api_service.dart';
 
 void main() {
+  // Start prefetching profiles immediately when the app launches
+  ProfileApiService().prefetchProfiles(count: 50);
+  
   runApp(const MyApp());
 }
 

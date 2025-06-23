@@ -9,6 +9,7 @@ import 'package:convert/convert.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
+import '../services/profile_api_service.dart';
 import '../services/follow_service.dart';
 import '../services/saved_profiles_service.dart';
 import '../services/web_background_service.dart';
@@ -26,6 +27,7 @@ class CardOverlayScreen extends StatefulWidget {
 class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
+  final ProfileApiService _profileApiService = ProfileApiService();
   final FollowService _followService = FollowService();
   late final SavedProfilesService _savedProfilesService;
   List<NostrProfile> _profiles = [];
@@ -44,88 +46,57 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
 
   Future<void> _loadProfiles() async {
     try {
+      // Connect to Nostr for other services (follow, saved profiles, etc)
       await _nostrService.connect();
       
       // Load saved profiles (service already listens to events internally)
       await _savedProfilesService.loadSavedProfiles();
       
-      // Manually request profiles
-      print('CardOverlayScreen: Manually requesting profiles...');
-      await _nostrService.requestProfilesWithLimit(limit: 100);
-      
-      // Give the service a moment to process initial profiles
-      await Future.delayed(const Duration(milliseconds: 500));
-      
-      // Check if we already have profiles from a previous load
-      if (_profiles.length >= 10 && mounted) {
+      // Check if we have cached profiles from prefetch
+      if (_profileApiService.cachedProfiles.isNotEmpty) {
+        print('CardOverlayScreen: Using ${_profileApiService.cachedProfiles.length} prefetched profiles');
         setState(() {
+          _profiles = List.from(_profileApiService.cachedProfiles);
+          
+          // Insert special profile at position 10 if we have enough profiles
+          if (_profiles.length >= 10) {
+            _insertSpecialProfile();
+          }
+          
           _isLoading = false;
         });
-      }
-      
-      // Special profile to insert at position 10
-      const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
-      print('Special profile pubkey: $specialPubkey');
-      
-      // Listen for profiles
-      _nostrService.profilesStream.listen((profile) {
+      } else {
+        // Fetch profiles if not already cached
+        print('CardOverlayScreen: Fetching fresh profiles...');
+        final profiles = await _profileApiService.fetchRandomProfiles(count: 50);
+        
         if (mounted) {
           setState(() {
-            // Check if this is an update for the special profile
-            if (profile.pubkey == specialPubkey) {
-              // Find and update the special profile if it's already in the list
-              final index = _profiles.indexWhere((p) => p.pubkey == specialPubkey);
-              if (index != -1) {
-                _profiles[index] = profile;
-                print('Updated special profile with real data: ${profile.displayNameOrName}');
-                return;
-              }
+            _profiles = List.from(profiles);
+            
+            // Insert special profile at position 10 if we have enough profiles
+            if (_profiles.length >= 10) {
+              _insertSpecialProfile();
             }
             
-            // Insert special profile at position 9 (10th card, 0-indexed)
-            if (_profiles.length == 9) {
-              print('Inserting special profile at position 10');
-              // Create a basic profile with the special pubkey
-              final specialProfile = NostrProfile(
-                pubkey: specialPubkey,
-                name: 'Special Profile',
-                displayName: 'Special Profile',
-                about: 'Loading profile...',
-                picture: null,
-                banner: null,
-                nip05: null,
-                lud16: null,
-                website: null,
-                createdAt: DateTime.now(),
-              );
-              _profiles.add(specialProfile);
-              
-              // Send a specific request for this profile
-              _requestSpecificProfile(specialPubkey);
-            }
-            
-            // Add regular profiles
-            if (_profiles.length < 50) {
-              _profiles.add(profile);
-              // Stop loading once we have enough profiles to swipe
-              if (_profiles.length >= 10) {
-                _isLoading = false;
-              }
-            }
-          });
-        }
-      });
-
-      // Wait a bit for profiles to load if we don't have any yet
-      if (_profiles.isEmpty) {
-        await Future.delayed(const Duration(seconds: 5));
-        
-        if (mounted && _profiles.isEmpty) {
-          setState(() {
             _isLoading = false;
           });
         }
       }
+      
+      // Listen for any new profile fetches
+      _profileApiService.profilesStream.listen((profiles) {
+        if (mounted && _profiles.isEmpty) {
+          setState(() {
+            _profiles = List.from(profiles);
+            
+            // Insert special profile at position 10 if we have enough profiles
+            if (_profiles.length >= 10) {
+              _insertSpecialProfile();
+            }
+          });
+        }
+      });
     } catch (e) {
       print('Error loading profiles: $e');
       if (mounted) {
@@ -134,6 +105,41 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
         });
       }
     }
+  }
+  
+  void _insertSpecialProfile() {
+    const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
+    
+    // Check if special profile already exists
+    if (_profiles.any((p) => p.pubkey == specialPubkey)) {
+      return;
+    }
+    
+    print('Inserting special profile at position 10');
+    
+    // Create a basic profile with the special pubkey
+    final specialProfile = NostrProfile(
+      pubkey: specialPubkey,
+      name: 'Special Profile',
+      displayName: 'Special Profile',
+      about: 'Loading profile...',
+      picture: null,
+      banner: null,
+      nip05: null,
+      lud16: null,
+      website: null,
+      createdAt: DateTime.now(),
+    );
+    
+    // Insert at position 9 (10th card, 0-indexed)
+    if (_profiles.length >= 9) {
+      _profiles.insert(9, specialProfile);
+    } else {
+      _profiles.add(specialProfile);
+    }
+    
+    // Request the full profile data
+    _requestSpecificProfile(specialPubkey);
   }
 
   String? _npubToHex(String npub) {
@@ -591,6 +597,11 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       setState(() {
         _currentIndex = currentIndex;
       });
+      
+      // Check if we're running low on profiles and fetch more
+      if (_profiles.length - currentIndex < 10) {
+        _loadMoreProfiles();
+      }
     }
     
     String action;
@@ -622,6 +633,22 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     // Follow action (right swipe) has its own feedback in _handleFollow
     
     return true;
+  }
+  
+  Future<void> _loadMoreProfiles() async {
+    try {
+      print('CardOverlayScreen: Loading more profiles...');
+      final newProfiles = await _profileApiService.fetchRandomProfiles(count: 30);
+      
+      if (mounted && newProfiles.isNotEmpty) {
+        setState(() {
+          // Add new profiles at the end
+          _profiles.addAll(newProfiles);
+        });
+      }
+    } catch (e) {
+      print('Error loading more profiles: $e');
+    }
   }
 
   bool _onUndo(
