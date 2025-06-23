@@ -112,23 +112,6 @@ class ProfileCard extends StatelessWidget {
                 ),
               ),
             ),
-            // Info icon to indicate tap functionality
-            Positioned(
-              top: 20,
-              right: 20,
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.5),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.info_outline,
-                  color: Colors.white,
-                  size: 24,
-                ),
-              ),
-            ),
             Positioned(
               bottom: 20,
               left: 20,
