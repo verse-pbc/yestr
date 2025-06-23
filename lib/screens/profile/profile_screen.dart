@@ -5,6 +5,7 @@ import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
 import '../../services/reaction_service.dart';
 import '../../services/key_management_service.dart';
+import '../../services/saved_profiles_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
@@ -28,6 +29,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final NostrService _nostrService = NostrService();
   final ReactionService _reactionService = ReactionService();
   final KeyManagementService _keyService = KeyManagementService();
+  final SavedProfilesService _savedProfilesService = SavedProfilesService();
   Future<List<NostrEvent>>? _notesFuture;
   final Set<String> _likedNotes = {}; // Track liked notes locally
   final Map<String, bool> _likingInProgress = {}; // Track ongoing like operations
@@ -135,10 +137,74 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.all(16.0),
+              padding: const EdgeInsets.only(left: 16.0, right: 16.0, bottom: 16.0, top: 8.0),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Action buttons row
+                  Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildActionIndicator(
+                          Icons.close,
+                          'Nope',
+                          Colors.red,
+                          () {
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        _buildActionIndicator(
+                          Icons.skip_next,
+                          'Skip',
+                          Colors.yellow,
+                          () {
+                            Navigator.of(context).pop();
+                          },
+                        ),
+                        _buildActionIndicator(
+                          Icons.bookmark,
+                          'Save',
+                          Colors.blue,
+                          () async {
+                            await _handleSaveProfile();
+                          },
+                        ),
+                        _buildActionIndicator(
+                          Icons.person_add,
+                          'Follow',
+                          Colors.green,
+                          () async {
+                            final hasKey = await _keyService.hasPrivateKey();
+                            if (!hasKey) {
+                              if (mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                    content: Text('Please login to follow users'),
+                                    backgroundColor: Colors.orange,
+                                  ),
+                                );
+                              }
+                              return;
+                            }
+                            
+                            // TODO: Implement follow functionality
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Follow functionality coming soon!'),
+                                  backgroundColor: Colors.blue,
+                                ),
+                              );
+                            }
+                          },
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  
                   // NIP-05 Verification
                   if (widget.profile.nip05 != null && widget.profile.nip05!.isNotEmpty) ...[
                     Row(
@@ -405,6 +471,44 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  Widget _buildActionIndicator(
+    IconData icon,
+    String label,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          color: Colors.transparent,
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: color.withOpacity(0.1),
+              ),
+              child: Icon(icon, color: color, size: 32),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildInfoRow(String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -586,6 +690,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
         setState(() {
           _repostingInProgress[note.id] = false;
         });
+      }
+    }
+  }
+
+  Future<void> _handleSaveProfile() async {
+    try {
+      final saved = await _savedProfilesService.saveProfile(widget.profile.pubkey);
+      if (saved && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Saved ${widget.profile.displayNameOrName}'),
+            duration: const Duration(seconds: 2),
+            backgroundColor: Colors.blue,
+          ),
+        );
+      }
+    } catch (e) {
+      print('Error saving profile: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to save profile'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
+          ),
+        );
       }
     }
   }
