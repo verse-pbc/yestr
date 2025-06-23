@@ -4,6 +4,7 @@ import '../services/key_management_service.dart';
 import '../services/web_background_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/saved_profiles_screen.dart';
+import '../screens/card_overlay_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -31,6 +32,20 @@ class _AppDrawerState extends State<AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
+    // Detect current route
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    final currentWidget = context.widget.runtimeType.toString();
+    
+    // Check if we're on SavedProfilesScreen by checking the widget tree
+    bool isOnSavedScreen = false;
+    context.visitAncestorElements((element) {
+      if (element.widget.runtimeType.toString() == 'SavedProfilesScreen') {
+        isOnSavedScreen = true;
+        return false;
+      }
+      return true;
+    });
+
     return Drawer(
       backgroundColor: const Color(0xFF1a1c22),
       child: Column(
@@ -58,9 +73,17 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'Discover',
                   onTap: () {
                     Navigator.pop(context); // Close drawer
-                    // Already on Discover screen
+                    if (isOnSavedScreen) {
+                      // Navigate back to Discover screen
+                      Navigator.pushReplacement(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const CardOverlayScreen(),
+                        ),
+                      );
+                    }
                   },
-                  isSelected: true,
+                  isSelected: !isOnSavedScreen,
                 ),
                 _buildDrawerItem(
                   context,
@@ -68,13 +91,16 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'Saved',
                   onTap: () {
                     Navigator.pop(context);
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => const SavedProfilesScreen(),
-                      ),
-                    );
+                    if (!isOnSavedScreen) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const SavedProfilesScreen(),
+                        ),
+                      );
+                    }
                   },
+                  isSelected: isOnSavedScreen,
                 ),
                 _buildDrawerItem(
                   context,
