@@ -3,6 +3,8 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/nostr_profile.dart';
 import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
+import '../../services/reaction_service.dart';
+import '../../services/key_management_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
@@ -24,7 +26,11 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final NostrService _nostrService = NostrService();
+  final ReactionService _reactionService = ReactionService();
+  final KeyManagementService _keyService = KeyManagementService();
   Future<List<NostrEvent>>? _notesFuture;
+  final Set<String> _likedNotes = {}; // Track liked notes locally
+  final Map<String, bool> _likingInProgress = {}; // Track ongoing like operations
 
   @override
   void initState() {
@@ -360,12 +366,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 IconButton(
-                  icon: const Icon(Icons.favorite_border),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Like feature coming soon!')),
-                    );
-                  },
+                  icon: Icon(
+                    _likedNotes.contains(note.id) 
+                        ? Icons.favorite 
+                        : Icons.favorite_border,
+                    color: _likedNotes.contains(note.id) 
+                        ? Colors.red 
+                        : null,
+                  ),
+                  onPressed: _likingInProgress[note.id] == true
+                      ? null
+                      : () => _handleLike(note),
                 ),
                 IconButton(
                   icon: const Icon(Icons.repeat),
@@ -438,6 +449,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   void _shareNote(NostrEvent note) {
     ShareNoteSheet.show(context, note, widget.profile);
+  }
+
+  Future<void> _handleLike(NostrEvent note) async {
+    // Check if user is logged in
+    final hasPrivateKey = await _keyService.hasPrivateKey();
+    if (!hasPrivateKey) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to like posts'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Set liking in progress
+    setState(() {
+      _likingInProgress[note.id] = true;
+    });
+
+    try {
+      // Call the reaction service to like the post
+      final success = await _reactionService.likePost(note);
+      
+      if (success) {
+        if (mounted) {
+          setState(() {
+            _likedNotes.add(note.id);
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Liked!'),
+              duration: Duration(seconds: 1),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to like post'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error liking post: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error liking post'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _likingInProgress[note.id] = false;
+        });
+      }
+    }
   }
 
   void _showMessageBottomSheet(BuildContext context) {
