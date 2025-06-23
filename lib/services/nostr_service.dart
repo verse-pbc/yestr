@@ -14,7 +14,6 @@ class NostrService {
   NostrService._internal();
   
   final KeyManagementService _keyService = KeyManagementService();
-  final EventSigner _eventSigner = EventSigner();
   final _profilesController = StreamController<NostrProfile>.broadcast();
   final _eventsController = StreamController<Map<String, dynamic>>.broadcast();
   final List<NostrProfile> _profiles = [];
@@ -172,7 +171,6 @@ class NostrService {
           picture: null,
           banner: null,
           nip05: null,
-          lud06: null,
           lud16: null,
           website: null,
         ),
@@ -283,16 +281,20 @@ class NostrService {
 
   Future<bool> publishEvent(Map<String, dynamic> eventData) async {
     try {
-      // Add created_at if not present
-      if (!eventData.containsKey('created_at')) {
-        eventData['created_at'] = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+      // Get keys for signing
+      final keys = await _keyService.getKeys();
+      if (keys == null) {
+        throw Exception('No keys available for signing');
       }
       
-      // Sign the event
-      final signedEvent = await _eventSigner.signEvent(eventData);
-      if (signedEvent == null) {
-        throw Exception('Failed to sign event');
-      }
+      // Create signed event using EventSigner static method
+      final signedEvent = EventSigner.createSignedEvent(
+        privateKeyHex: keys['private']!,
+        publicKeyHex: keys['public']!,
+        kind: eventData['kind'] ?? 1,
+        content: eventData['content'] ?? '',
+        tags: List<List<String>>.from(eventData['tags'] ?? []),
+      );
       
       final message = [
         "EVENT",
@@ -326,6 +328,53 @@ class NostrService {
     if (_channels.isNotEmpty) {
       _setupEventListeners();
     }
+  }
+
+  Stream<Map<String, dynamic>> subscribeToSimpleFilter(Map<String, dynamic> filter) {
+    final controller = StreamController<Map<String, dynamic>>.broadcast();
+    final subscriptionId = 'sub_${DateTime.now().millisecondsSinceEpoch}';
+    
+    // Subscribe to events matching the filter
+    final request = [
+      "REQ",
+      subscriptionId,
+      filter,
+    ];
+    
+    // Send request to all channels
+    for (final channel in _channels) {
+      channel.sink.add(jsonEncode(request));
+    }
+    
+    // Listen for matching events
+    final subscription = _eventsController.stream.listen((eventData) {
+      // Check if event matches filter criteria
+      bool matches = true;
+      
+      if (filter['kinds'] != null && filter['kinds'] is List) {
+        matches = matches && (filter['kinds'] as List).contains(eventData['kind']);
+      }
+      
+      if (filter['authors'] != null && filter['authors'] is List) {
+        matches = matches && (filter['authors'] as List).contains(eventData['pubkey']);
+      }
+      
+      if (matches) {
+        controller.add(eventData);
+      }
+    });
+    
+    // Clean up subscription when done
+    controller.onCancel = () {
+      subscription.cancel();
+      // Send CLOSE to all channels
+      final closeRequest = ["CLOSE", subscriptionId];
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(closeRequest));
+      }
+    };
+    
+    return controller.stream;
   }
 
   void disconnect() {

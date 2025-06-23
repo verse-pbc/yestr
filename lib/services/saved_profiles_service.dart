@@ -21,7 +21,6 @@ class SavedProfilesService {
   }
   
   final NostrService _nostrService;
-  final EventSigner _eventSigner = EventSigner();
   final KeyManagementService _keyService = KeyManagementService();
   
   final _savedProfilesController = StreamController<List<String>>.broadcast();
@@ -178,12 +177,21 @@ class SavedProfilesService {
           'content': '', // Public bookmarks, no encrypted content
         };
         
-        // Sign the event
-        final signedEvent = await _eventSigner.signEvent(eventData);
-        if (signedEvent == null) {
-          print('SavedProfilesService: Failed to sign event');
+        // Get keys for signing
+        final keys = await _keyService.getKeys();
+        if (keys == null) {
+          print('SavedProfilesService: No keys available for signing');
           return false;
         }
+        
+        // Sign the event using EventSigner static method
+        final signedEvent = EventSigner.createSignedEvent(
+          privateKeyHex: keys['private']!,
+          publicKeyHex: keys['public']!,
+          kind: _bookmarkListKind,
+          content: '',
+          tags: tags,
+        );
         
         // Send to relays
         final eventMessage = ["EVENT", signedEvent];
@@ -245,12 +253,21 @@ class SavedProfilesService {
           'content': '', // Public bookmarks, no encrypted content
         };
         
-        // Sign the event
-        final signedEvent = await _eventSigner.signEvent(eventData);
-        if (signedEvent == null) {
-          print('SavedProfilesService: Failed to sign event');
+        // Get keys for signing
+        final keys = await _keyService.getKeys();
+        if (keys == null) {
+          print('SavedProfilesService: No keys available for signing');
           return false;
         }
+        
+        // Sign the event using EventSigner static method
+        final signedEvent = EventSigner.createSignedEvent(
+          privateKeyHex: keys['private']!,
+          publicKeyHex: keys['public']!,
+          kind: _bookmarkListKind,
+          content: '',
+          tags: tags,
+        );
         
         // Send to relays
         final eventMessage = ["EVENT", signedEvent];

@@ -18,7 +18,6 @@ import 'package:convert/convert.dart';
 class Nip17DmService {
   final KeyManagementService _keyManagementService;
   final NostrService _nostrService = NostrService();
-  final EventSigner _eventSigner = EventSigner();
 
   Nip17DmService(this._keyManagementService);
 
@@ -158,12 +157,16 @@ class Nip17DmService {
       'content': encryptedSeal,
     };
     
-    // Sign the gift wrap event
-    final giftWrapEvent = await _eventSigner.signEvent(giftWrapData);
-    
-    if (giftWrapEvent == null) {
-      throw Exception('Failed to sign gift wrap event');
-    }
+    // Sign the gift wrap event using EventSigner static method
+    final giftWrapEvent = EventSigner.createSignedEvent(
+      privateKeyHex: randomPrivateKey,
+      publicKeyHex: randomPublicKey,
+      kind: 1059,
+      content: encryptedSeal,
+      tags: [
+        ['p', recipientPubkey],
+      ],
+    );
     
     return giftWrapEvent;
   }
