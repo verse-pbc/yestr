@@ -31,6 +31,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<List<NostrEvent>>? _notesFuture;
   final Set<String> _likedNotes = {}; // Track liked notes locally
   final Map<String, bool> _likingInProgress = {}; // Track ongoing like operations
+  final Set<String> _repostedNotes = {}; // Track reposted notes locally
+  final Map<String, bool> _repostingInProgress = {}; // Track ongoing repost operations
 
   @override
   void initState() {
@@ -379,12 +381,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       : () => _handleLike(note),
                 ),
                 IconButton(
-                  icon: const Icon(Icons.repeat),
-                  onPressed: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Repost feature coming soon!')),
-                    );
-                  },
+                  icon: Icon(
+                    Icons.repeat,
+                    color: _repostedNotes.contains(note.id) 
+                        ? Colors.green 
+                        : null,
+                  ),
+                  onPressed: _repostingInProgress[note.id] == true
+                      ? null
+                      : () => _handleRepost(note),
                 ),
                 IconButton(
                   icon: const Icon(Icons.share),
@@ -513,6 +518,73 @@ class _ProfileScreenState extends State<ProfileScreen> {
       if (mounted) {
         setState(() {
           _likingInProgress[note.id] = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _handleRepost(NostrEvent note) async {
+    // Check if user is logged in
+    final hasPrivateKey = await _keyService.hasPrivateKey();
+    if (!hasPrivateKey) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to repost'),
+            backgroundColor: Colors.orange,
+          ),
+        );
+      }
+      return;
+    }
+
+    // Set reposting in progress
+    setState(() {
+      _repostingInProgress[note.id] = true;
+    });
+
+    try {
+      // Call the reaction service to repost
+      final success = await _reactionService.repostNote(note);
+      
+      if (success) {
+        if (mounted) {
+          setState(() {
+            _repostedNotes.add(note.id);
+          });
+          
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Reposted!'),
+              duration: Duration(seconds: 1),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to repost'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      print('Error reposting: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Error reposting'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _repostingInProgress[note.id] = false;
         });
       }
     }

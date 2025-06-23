@@ -63,6 +63,60 @@ class ReactionService {
     }
   }
 
+  // Create a repost event (kind 6) 
+  Future<bool> repostNote(NostrEvent targetEvent) async {
+    try {
+      // Check if user is logged in
+      final privateKeyHex = await _keyService.getPrivateKey();
+      final publicKeyHex = await _keyService.getPublicKey();
+      
+      if (privateKeyHex == null || publicKeyHex == null) {
+        print('ReactionService: User not logged in');
+        return false;
+      }
+
+      // Create repost event data
+      final eventData = {
+        'pubkey': publicKeyHex,
+        'kind': 6, // Repost event
+        'tags': [
+          ['e', targetEvent.id, ''], // Reference to the event being reposted
+          ['p', targetEvent.pubkey], // Reference to the author of the original event
+        ],
+        'content': jsonEncode(targetEvent.toJson()), // Include the original event as content
+        'created_at': DateTime.now().millisecondsSinceEpoch ~/ 1000,
+      };
+
+      // Sign the event
+      final signedEvent = await EventSigner.createSignedEvent(
+        privateKeyHex: privateKeyHex,
+        publicKeyHex: publicKeyHex,
+        kind: 6,
+        content: jsonEncode(targetEvent.toJson()),
+        tags: eventData['tags'] as List<List<String>>,
+      );
+
+      if (signedEvent == null) {
+        print('ReactionService: Failed to sign repost event');
+        return false;
+      }
+
+      // Publish the repost event
+      final success = await _nostrService.publishEvent(signedEvent);
+      
+      if (success) {
+        print('ReactionService: Successfully published repost for event ${targetEvent.id}');
+      } else {
+        print('ReactionService: Failed to publish repost');
+      }
+      
+      return success;
+    } catch (e) {
+      print('ReactionService: Error reposting: $e');
+      return false;
+    }
+  }
+
   // Get reactions for a specific event
   Stream<Map<String, int>> getReactionsForEvent(String eventId) {
     // This would query for kind 7 events that reference the given event ID
