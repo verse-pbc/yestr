@@ -4,8 +4,7 @@ import 'package:flutter/foundation.dart';
 class CorsHelper {
   /// List of known CORS proxy services (use with caution in production)
   static const List<String> corsProxies = [
-    'https://corsproxy.io/?',
-    'https://api.allorigins.win/raw?url=',
+    'https://thingproxy.freeboard.io/fetch/',
   ];
   
   /// Track failed domains during runtime
@@ -17,24 +16,17 @@ class CorsHelper {
     // On mobile apps, direct requests work fine
     if (!kIsWeb) return false;
     
-    // List of domains known to have CORS issues on web
-    final problematicDomains = [
-      'charlie.fish',
-      'misskey.bubbletea.dev',
-      'social.heise.de',
-      'social.trom.tf',
-      'poliverso.org',
-      's3.solarcom.ch',
-      'media.misskeyusercontent.com',
-      'r2.primal.net', // Add primal.net cache
-      'nostr.build', // Add nostr.build for image hosting
-    ];
-    
+    // Enable CORS proxy for all non-localhost URLs on web
     try {
       final uri = Uri.parse(url);
-      // Check if domain is in the known problematic list or has failed before
-      return problematicDomains.any((domain) => uri.host.contains(domain)) ||
-             _failedDomains.contains(uri.host);
+      // Don't proxy localhost or data URLs
+      if (uri.host.contains('localhost') || 
+          uri.host.contains('127.0.0.1') || 
+          url.startsWith('data:')) {
+        return false;
+      }
+      // Proxy all external images on web
+      return true;
     } catch (e) {
       return false;
     }
@@ -59,14 +51,25 @@ class CorsHelper {
   static String wrapWithCorsProxy(String url) {
     if (!needsCorsProxy(url)) return url;
     
+    // If no working proxies available, return original URL
+    if (corsProxies.isEmpty) {
+      if (kDebugMode) {
+        print('[CorsHelper] No CORS proxies available, returning original URL: $url');
+      }
+      return url;
+    }
+    
     // Use the first available CORS proxy
     final proxy = corsProxies.first;
     
+    // For thingproxy, we don't need to encode the URL
+    final proxiedUrl = '$proxy$url';
+    
     if (kDebugMode) {
       print('[CorsHelper] Wrapping URL with CORS proxy: $url');
-      print('[CorsHelper] Proxied URL: $proxy${Uri.encodeComponent(url)}');
+      print('[CorsHelper] Proxied URL: $proxiedUrl');
     }
     
-    return '$proxy${Uri.encodeComponent(url)}';
+    return proxiedUrl;
   }
 }

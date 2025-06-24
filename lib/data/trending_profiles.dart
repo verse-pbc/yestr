@@ -1,0 +1,111 @@
+// Known trending profiles from nostr.band
+// This is a fallback list when API is not accessible
+class TrendingProfiles {
+  static const List<Map<String, String>> topProfiles = [
+    {
+      'pubkey': 'e0f6050d930a61323bac4a5b47d58e961da2919834f3f58f3b312c2918852b55',
+      'name': 'Flame_of_Man⚡️',
+      'display_name': 'Flame_of_Man⚡️',
+      'about': 'Live and let live',
+      'picture': 'https://picsum.photos/400/600?random=1',
+    },
+    {
+      'pubkey': '9349c924270bf5b2390f6d780dde344e965512470321b1603cef68522f9c01cc',
+      'name': 'Tsuki',
+      'display_name': 'Tsuki',
+      'about': 'Bitcoin & Nostr enthusiast',
+      'picture': 'https://picsum.photos/400/600?random=2',
+    },
+    {
+      'pubkey': '5be6189315d16136de600c1491b1dea44c79605b79bb2cda3452841a646b0e69',
+      'name': 'Product Hunt',
+      'display_name': 'Product Hunt',
+      'about': 'The best new products in tech',
+      'picture': 'https://picsum.photos/400/600?random=3',
+    },
+    {
+      'pubkey': '65905b0ded4344c8e6c163e604b416fced8f834b92ac9b24c85c2a6719806290',
+      'name': 'bitcoinmagazine',
+      'display_name': 'Bitcoin Magazine',
+      'about': 'The most trusted voice in #Bitcoin.',
+      'picture': 'https://i.nostr.build/T8sfhW4l1uPMpmQF.jpg',
+    },
+    {
+      'pubkey': '0de86aa03c4bdb3e9ffc8c982a214b7f960ee69f58130c09c5916aeaa6f6c5e9',
+      'name': 'GrapefruitGang',
+      'display_name': 'GrapefruitGang',
+      'about': 'Bitcoin educator and enthusiast',
+      'picture': 'https://picsum.photos/400/600?random=5',
+    },
+    {
+      'pubkey': '58765d57bbc5fa0902937e9c39c0d3c8ee925dd7701dab0e0ab01c23d1f1b1ca',
+      'name': 'AskHODL',
+      'display_name': 'AskHODL ∞/21M',
+      'about': 'Building on Bitcoin',
+      'picture': 'https://picsum.photos/400/600?random=6',
+    },
+    {
+      'pubkey': '6e6ec011778c5c11ea93190e47a3977db74b7ca9035d1b75132bb58ba310d7ca',
+      'name': 'CamiloJdL',
+      'display_name': 'Camilo',
+      'about': 'Bitcoin and Lightning developer',
+      'picture': 'https://picsum.photos/400/600?random=7',
+    },
+    {
+      'pubkey': '0e9fa10e04041c466b1eb918d1172fe907ae890db7df6d8e7cfcd1b86bb01833',
+      'name': 'lovinlynne',
+      'display_name': 'Lynn',
+      'about': 'Nostr and Bitcoin enthusiast',
+      'picture': 'https://picsum.photos/400/600?random=8',
+    },
+    {
+      'pubkey': '5b9a48cac1c64b16b3a2d7b952b2445410f97a94518dd2361e15894a595e9303',
+      'name': 'matta',
+      'display_name': 'matta',
+      'about': 'Building the future',
+      'picture': 'https://picsum.photos/400/600?random=9',
+    },
+    {
+      'pubkey': '3ad426ca6b38e5b4b21035e832b8a2d3beb6bfac2d8cd6a1c948c87c4fb08b49',
+      'name': 'MichaelJ',
+      'display_name': 'Michael J',
+      'about': 'Tech and Bitcoin',
+      'picture': 'https://picsum.photos/400/600?random=10',
+    },
+    {
+      'pubkey': '82341f882b6eabcd2ba7f1ef90aad961cf074af15b9ef44a09f9d2a8fbfbe6a2',
+      'name': 'jack',
+      'display_name': 'jack',
+      'about': 'Block Head',
+      'picture': 'https://image.nostr.build/26867ce34e4b11f0a1d083114919a9f4eca699f3b007454c396ef48c43628315.jpg',
+    },
+    {
+      'pubkey': 'a1f1b6f032e45e8037f7482e8c12205ec10a80a3bf4f5f87f8517f674156b6ba',
+      'name': 'Erik',
+      'display_name': 'Erik',
+      'about': 'Bitcoin and Lightning',
+      'picture': 'https://picsum.photos/400/600?random=12',
+    },
+    {
+      'pubkey': 'fa984bd7dbb282f07e16e7ae87b26a2a7b9b90b7246a44771f0cf5ae58018f52',
+      'name': 'pablof7z',
+      'display_name': 'Pablo F7z',
+      'about': 'Building Nostr tools',
+      'picture': 'https://picsum.photos/400/600?random=13',
+    },
+    {
+      'pubkey': '84dee6e676e5bb67b4ad4e042cf70cbd8681155db535942fcc6a0533858a7240',
+      'name': 'fiatjaf',
+      'display_name': 'fiatjaf',
+      'about': 'Nostr creator',
+      'picture': 'https://fiatjaf.com/static/favicon.jpg',
+    },
+    {
+      'pubkey': '2ef93f01cd2493e04235a6b87b10d3c4a74e2a7eb7c3caf168268f6af73314b5',
+      'name': 'jb55',
+      'display_name': 'jb55',
+      'about': 'Damus creator',
+      'picture': 'https://cdn.jb55.com/img/red-me.jpg',
+    },
+  ];
+}

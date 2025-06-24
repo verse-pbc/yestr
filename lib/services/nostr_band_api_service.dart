@@ -2,6 +2,8 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/nostr_profile.dart';
+// Only import platform-specific code conditionally
+import 'dart:io' if (dart.library.html) 'dart:html' as platform;
 
 class NostrBandApiService {
   static final NostrBandApiService _instance = NostrBandApiService._internal();
@@ -35,22 +37,52 @@ class NostrBandApiService {
 
     _isLoading = true;
     try {
-      print('NostrBandApiService: Fetching trending profiles from $_baseUrl/trending/profiles');
+      final apiUrl = '$_baseUrl/trending/profiles';
+      
+      // Use a self-hosted CORS proxy or consider these alternatives:
+      // 1. Deploy a simple Cloudflare Worker as a CORS proxy
+      // 2. Use Vercel/Netlify functions
+      // 3. Set up a simple Express server with cors middleware
+      
+      // For immediate testing, try thingproxy
+      final proxyUrl = 'https://thingproxy.freeboard.io/fetch/$apiUrl';
+      
+      print('NostrBandApiService: Fetching trending profiles from: $apiUrl');
+      print('NostrBandApiService: Using proxy: $proxyUrl');
       
       final response = await http.get(
-        Uri.parse('$_baseUrl/trending/profiles'),
+        Uri.parse(proxyUrl),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
         },
       ).timeout(const Duration(seconds: 15));
+      
+      print('NostrBandApiService: Response status: ${response.statusCode}');
+      print('NostrBandApiService: Response headers: ${response.headers}');
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
         print('NostrBandApiService: Received response with data type: ${data.runtimeType}');
         
+        // Debug: Print first few items of response to see structure
+        if (data is List && data.isNotEmpty) {
+          print('NostrBandApiService: First item structure:');
+          print(jsonEncode(data.first));
+        } else if (data is Map) {
+          print('NostrBandApiService: Response is a Map with keys: ${data.keys.toList()}');
+          if (data.containsKey('profiles') && data['profiles'] is List) {
+            final profilesList = data['profiles'] as List;
+            if (profilesList.isNotEmpty) {
+              print('NostrBandApiService: First profile item:');
+              print(jsonEncode(profilesList.first));
+            }
+          }
+        }
+        
         final profiles = <NostrProfile>[];
         
+        // The API returns an object with 'profiles' key when no parameters are provided
         if (data is Map && data.containsKey('profiles')) {
           final profilesList = data['profiles'] as List;
           print('NostrBandApiService: Found ${profilesList.length} trending profiles');
@@ -60,6 +92,22 @@ class NostrBandApiService {
               final profile = _parseProfile(item);
               if (profile != null) {
                 profiles.add(profile);
+                print('PROFILE DOWNLOADED: ${profile.pubkey} - ${profile.displayNameOrName}');
+              }
+            } catch (e) {
+              print('NostrBandApiService: Error parsing profile: $e');
+            }
+          }
+        } else if (data is List) {
+          // Handle the case where API returns array directly (with date parameter)
+          print('NostrBandApiService: Found ${data.length} trending profiles in array format');
+          
+          for (final item in data) {
+            try {
+              final profile = _parseProfile(item);
+              if (profile != null) {
+                profiles.add(profile);
+                print('PROFILE DOWNLOADED: ${profile.pubkey} - ${profile.displayNameOrName}');
               }
             } catch (e) {
               print('NostrBandApiService: Error parsing profile: $e');
@@ -67,7 +115,17 @@ class NostrBandApiService {
           }
         }
 
-        print('NostrBandApiService: Successfully parsed ${profiles.length} profiles');
+        print('\n=== NOSTR.BAND API PROFILES SUMMARY ===');
+        print('Total profiles downloaded: ${profiles.length}');
+        print('Expected trending profiles:');
+        print('1. e0f6050d930a61323bac4a5b47d58e961da2919834f3f58f3b312c2918852b55 - Flame_of_Man⚡️');
+        print('2. 9349c924270bf5b2390f6d780dde344e965512470321b1603cef68522f9c01cc - Tsuki');
+        print('3. 5be6189315d16136de600c1491b1dea44c79605b79bb2cda3452841a646b0e69 - Product Hunt');
+        print('\nActual profiles received:');
+        for (int i = 0; i < profiles.length && i < 10; i++) {
+          print('${i + 1}. ${profiles[i].pubkey} - ${profiles[i].displayNameOrName}');
+        }
+        print('=====================================\n');
         _cachedProfiles = profiles;
         _lastFetchTime = DateTime.now();
         _profilesController.add(profiles);
@@ -146,6 +204,19 @@ class NostrBandApiService {
     }).catchError((error) {
       print('NostrBandApiService: Background prefetch error: $error');
     });
+  }
+
+  // Clear the cache and force a fresh fetch
+  void clearCache() {
+    print('NostrBandApiService: Clearing cache');
+    _cachedProfiles = [];
+    _lastFetchTime = null;
+  }
+
+  // Force refresh profiles (clear cache and fetch new ones)
+  Future<List<NostrProfile>> forceRefreshProfiles() async {
+    clearCache();
+    return fetchTrendingProfiles();
   }
 
   void dispose() {

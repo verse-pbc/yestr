@@ -57,11 +57,14 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       
       // Try to use Nostr Band API for trending profiles
       try {
-        // Check if we have cached profiles from prefetch
-        if (_nostrBandApiService.cachedProfiles.isNotEmpty) {
-          print('CardOverlayScreen: Using ${_nostrBandApiService.cachedProfiles.length} prefetched trending profiles');
+        // Force a fresh fetch to ensure we get the latest trending profiles
+        print('CardOverlayScreen: Clearing cache and fetching fresh trending profiles...');
+        _nostrBandApiService.clearCache();
+        final profiles = await _nostrBandApiService.fetchTrendingProfiles();
+        
+        if (profiles.isNotEmpty && mounted) {
           setState(() {
-            _profiles = List.from(_nostrBandApiService.cachedProfiles);
+            _profiles = List.from(profiles);
             
             // Insert special profile at position 10 if we have enough profiles
             if (_profiles.length >= 10) {
@@ -71,24 +74,13 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
             _isLoading = false;
           });
           apiSuccess = true;
-        } else {
-          // Fetch trending profiles if not already cached
-          print('CardOverlayScreen: Fetching fresh trending profiles...');
-          final profiles = await _nostrBandApiService.fetchTrendingProfiles();
           
-          if (profiles.isNotEmpty && mounted) {
-            setState(() {
-              _profiles = List.from(profiles);
-              
-              // Insert special profile at position 10 if we have enough profiles
-              if (_profiles.length >= 10) {
-                _insertSpecialProfile();
-              }
-              
-              _isLoading = false;
-            });
-            apiSuccess = true;
+          print('\n=== PROFILES LOADED IN APP ===');
+          print('Total profiles in app: ${_profiles.length}');
+          for (int i = 0; i < _profiles.length; i++) {
+            print('${i + 1}. ${_profiles[i].pubkey} - ${_profiles[i].displayNameOrName}');
           }
+          print('==============================\n');
         }
       } catch (apiError) {
         print('CardOverlayScreen: Nostr Band API fetch failed: $apiError');
@@ -97,6 +89,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
       
       // If API failed or returned no profiles, fall back to Nostr relay profiles
       if (!apiSuccess) {
+        print('\n!!! FALLBACK TO RELAY PROFILES !!!');
         print('CardOverlayScreen: Using Nostr relay profiles as fallback');
         
         // Request profiles from Nostr relays
@@ -109,6 +102,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
               // Add profiles up to a limit
               if (_profiles.length < 50) {
                 _profiles.add(profile);
+                print('RELAY PROFILE ADDED: ${profile.pubkey} - ${profile.displayNameOrName}');
                 
                 // Insert special profile at position 10 if we have enough profiles
                 if (_profiles.length == 10) {

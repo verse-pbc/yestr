@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:dart_nostr/dart_nostr.dart' as dart_nostr;
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:http/http.dart' as http;
 import '../models/nostr_profile.dart';
 import '../models/nostr_event.dart';
 import 'key_management_service.dart';
@@ -124,6 +125,7 @@ class NostrService {
   Future<void> requestProfilesWithLimit({
     int limit = 50,
     List<String>? authors,
+    bool useTrendingProfiles = true,
   }) async {
     try {
       print('NostrService: Requesting profiles with limit $limit');
@@ -131,6 +133,23 @@ class NostrService {
       // Clear existing profiles
       _profiles.clear();
       
+      // Try to get trending profiles from nostr.band first
+      if (useTrendingProfiles && authors == null) {
+        try {
+          final trendingProfiles = await getTrendingProfilesFromNostrBand(limit: limit);
+          if (trendingProfiles.isNotEmpty) {
+            for (final profile in trendingProfiles) {
+              _profiles.add(profile);
+              _profilesController.add(profile);
+            }
+            return;
+          }
+        } catch (e) {
+          print('NostrService: Failed to get trending profiles from nostr.band, using relay fallback: $e');
+        }
+      }
+      
+      // Fallback to regular profile request
       final subscriptionId = 'profiles_limit_${DateTime.now().millisecondsSinceEpoch}';
       final filter = {
         "kinds": [0],
@@ -319,7 +338,7 @@ class NostrService {
       try {
         final channel = WebSocketChannel.connect(Uri.parse(url));
         _channels.add(channel);
-        print('NostrService: Connected to $url');
+        // Connected to $url
       } catch (e) {
         print('NostrService: Failed to connect to $url: $e');
       }
@@ -375,6 +394,227 @@ class NostrService {
     };
     
     return controller.stream;
+  }
+
+  Future<Map<String, int>> getFollowerFollowingCounts(String pubkey) async {
+    try {
+      // First try to get counts from nostr.band API
+      final nostrBandCounts = await getFollowerFollowingCountsFromNostrBand(pubkey);
+      if (nostrBandCounts['followers']! > 0 || nostrBandCounts['following']! > 0) {
+        return nostrBandCounts;
+      }
+      
+      // Fallback to relay-based counting
+      print('NostrService: Getting follower/following counts from relays for $pubkey');
+      
+      int followerCount = 0;
+      int followingCount = 0;
+      
+      // First, get the user's contact list to count following
+      final followingSubscriptionId = 'following_${DateTime.now().millisecondsSinceEpoch}';
+      final followingRequest = [
+        "REQ",
+        followingSubscriptionId,
+        {
+          "kinds": [3], // Contact list
+          "authors": [pubkey],
+          "limit": 1,
+        }
+      ];
+      
+      // Send request to get user's contact list
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(followingRequest));
+      }
+      
+      // Set up temporary listener for the user's contact list
+      final followingCompleter = Completer<void>();
+      StreamSubscription? followingSubscription;
+      
+      followingSubscription = _eventsController.stream.listen((eventData) {
+        if (eventData['kind'] == 3 && eventData['pubkey'] == pubkey) {
+          final tags = eventData['tags'] as List<dynamic>;
+          followingCount = tags.where((tag) => 
+            tag is List && tag.isNotEmpty && tag[0] == 'p'
+          ).length;
+          if (!followingCompleter.isCompleted) {
+            followingCompleter.complete();
+          }
+        }
+      });
+      
+      // Set timeout for following count
+      Timer(const Duration(seconds: 2), () {
+        if (!followingCompleter.isCompleted) {
+          followingCompleter.complete();
+        }
+      });
+      
+      await followingCompleter.future;
+      followingSubscription.cancel();
+      
+      // Close the following subscription
+      final closeFollowingRequest = ["CLOSE", followingSubscriptionId];
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(closeFollowingRequest));
+      }
+      
+      // Now get followers (contact lists that include this pubkey)
+      final followerSubscriptionId = 'followers_${DateTime.now().millisecondsSinceEpoch}';
+      final followerRequest = [
+        "REQ",
+        followerSubscriptionId,
+        {
+          "kinds": [3], // Contact list
+          "#p": [pubkey], // Contact lists that include this pubkey
+          "limit": 500, // Reasonable limit to prevent too much data
+        }
+      ];
+      
+      // Send request to get followers
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(followerRequest));
+      }
+      
+      // Count unique followers
+      final uniqueFollowers = <String>{};
+      
+      // Listen for follower events with timeout
+      final followerCompleter = Completer<void>();
+      Timer(const Duration(seconds: 2), () {
+        if (!followerCompleter.isCompleted) {
+          followerCompleter.complete();
+        }
+      });
+      
+      final followerSubscription = _eventsController.stream.listen((eventData) {
+        if (eventData['kind'] == 3) {
+          final tags = eventData['tags'] as List<dynamic>;
+          // Check if this contact list includes our pubkey
+          for (final tag in tags) {
+            if (tag is List && tag.length >= 2 && tag[0] == 'p' && tag[1] == pubkey) {
+              uniqueFollowers.add(eventData['pubkey'] as String);
+              break;
+            }
+          }
+        }
+      });
+      
+      await followerCompleter.future;
+      followerSubscription.cancel();
+      
+      // Close the follower subscription
+      final closeFollowerRequest = ["CLOSE", followerSubscriptionId];
+      for (final channel in _channels) {
+        channel.sink.add(jsonEncode(closeFollowerRequest));
+      }
+      
+      followerCount = uniqueFollowers.length;
+      
+      print('NostrService: Profile $pubkey has $followerCount followers and $followingCount following');
+      
+      return {
+        'followers': followerCount,
+        'following': followingCount,
+      };
+    } catch (e) {
+      print('NostrService: Error getting follower/following counts: $e');
+      return {'followers': 0, 'following': 0};
+    }
+  }
+
+  Future<Map<String, int>> getFollowerFollowingCountsFromNostrBand(String pubkey) async {
+    try {
+      print('NostrService: Getting follower/following counts from nostr.band for $pubkey');
+      
+      // Query nostr.band API for user stats
+      final url = Uri.parse('https://api.nostr.band/v0/stats/profile/$pubkey');
+      final response = await http.get(url).timeout(const Duration(seconds: 3));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // The API returns stats nested under 'stats' -> pubkey
+        final stats = data['stats'] as Map<String, dynamic>?;
+        if (stats != null && stats.containsKey(pubkey)) {
+          final userStats = stats[pubkey] as Map<String, dynamic>;
+          
+          final followerCount = userStats['followers_pubkey_count'] as int? ?? 0;
+          final followingCount = userStats['pub_following_pubkey_count'] as int? ?? 0;
+          
+          print('NostrService: nostr.band stats - followers: $followerCount, following: $followingCount');
+          
+          return {
+            'followers': followerCount,
+            'following': followingCount,
+          };
+        }
+      } else {
+        print('NostrService: nostr.band API returned status ${response.statusCode}');
+      }
+    } catch (e) {
+      print('NostrService: Error getting stats from nostr.band: $e');
+    }
+    
+    // Return zeros if API call fails
+    return {'followers': 0, 'following': 0};
+  }
+
+  Future<List<NostrProfile>> getTrendingProfilesFromNostrBand({int limit = 50}) async {
+    try {
+      // Getting trending profiles from today from nostr.band
+      
+      // Query nostr.band API for trending profiles (default is today)
+      final url = Uri.parse('https://api.nostr.band/v0/trending/profiles');
+      // Fetching trending profiles from today
+      final response = await http.get(url).timeout(const Duration(seconds: 5));
+      
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        
+        // The API returns an array directly when no date parameter is used
+        final profiles = data as List<dynamic>? ?? [];
+        
+        final nostrProfiles = <NostrProfile>[];
+        
+        // Process up to 'limit' profiles
+        for (int i = 0; i < profiles.length && i < limit; i++) {
+          final profileData = profiles[i] as Map<String, dynamic>;
+          
+          // The structure is: { pubkey, profile: { ... event data ... } }
+          final pubkey = profileData['pubkey'] as String?;
+          final profileEvent = profileData['profile'] as Map<String, dynamic>?;
+          
+          if (pubkey != null && profileEvent != null) {
+            // Extract profile metadata from the event content
+            final metadata = profileEvent['content'] != null 
+                ? jsonDecode(profileEvent['content'] as String) as Map<String, dynamic>
+                : <String, dynamic>{};
+            
+            final nostrProfile = NostrProfile(
+              pubkey: pubkey,
+              name: metadata['name'] as String?,
+              displayName: metadata['display_name'] as String?,
+              about: metadata['about'] as String?,
+              picture: metadata['picture'] as String?,
+              banner: metadata['banner'] as String?,
+              nip05: metadata['nip05'] as String?,
+              lud16: metadata['lud16'] as String?,
+              website: metadata['website'] as String?,
+            );
+            
+            nostrProfiles.add(nostrProfile);
+          }
+        }
+        
+        // Retrieved ${nostrProfiles.length} trending profiles from nostr.band
+        return nostrProfiles;
+      }
+    } catch (e) {
+      print('NostrService: Error getting trending profiles from nostr.band: $e');
+    }
+    
+    return [];
   }
 
   void disconnect() {
