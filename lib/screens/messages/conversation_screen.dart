@@ -31,6 +31,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
   List<DirectMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
+  bool _isRefreshing = false;
   StreamSubscription? _messageSubscription;
   String? _conversationSubscriptionId;
   Timer? _refreshTimer;
@@ -167,22 +168,60 @@ class _ConversationScreenState extends State<ConversationScreen> {
   }
   
   Future<void> _refreshMessages() async {
+    if (_isRefreshing) return; // Prevent multiple refreshes
+    
+    setState(() {
+      _isRefreshing = true;
+    });
+    
     try {
       print('[ConversationScreen] Refreshing messages...');
+      
+      // Force the service to check for new messages from relays
+      await _dmService.subscribeToConversationMessages(widget.profile.pubkey);
+      
+      // Wait a bit for messages to come in
+      await Future.delayed(const Duration(seconds: 2));
       
       // Get fresh messages from the service
       final freshMessages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
       
-      if (mounted && freshMessages.length > _messages.length) {
-        setState(() {
-          _messages = freshMessages;
-          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-        });
-        _scrollToBottom();
-        print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
+      if (mounted) {
+        // Check if we have new messages or if message list has changed
+        bool hasNewMessages = freshMessages.length != _messages.length;
+        
+        // Also check if the last message ID is different (in case messages were deleted/changed)
+        if (!hasNewMessages && freshMessages.isNotEmpty && _messages.isNotEmpty) {
+          hasNewMessages = freshMessages.last.id != _messages.last.id;
+        }
+        
+        if (hasNewMessages) {
+          setState(() {
+            _messages = freshMessages;
+            _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          });
+          _scrollToBottom();
+          print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
+          
+          // Show a snackbar when new messages arrive
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('New message received'),
+              duration: Duration(seconds: 2),
+            ),
+          );
+        } else {
+          print('[ConversationScreen] No new messages found');
+        }
       }
     } catch (e) {
       print('[ConversationScreen] Error refreshing messages: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isRefreshing = false;
+        });
+      }
     }
   }
 
@@ -296,6 +335,28 @@ class _ConversationScreenState extends State<ConversationScreen> {
               ),
             ],
           ),
+          actions: [
+            if (_isRefreshing)
+              const Center(
+                child: Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  ),
+                ),
+              )
+            else
+              IconButton(
+                icon: const Icon(Icons.refresh),
+                onPressed: _refreshMessages,
+                tooltip: 'Refresh messages',
+              ),
+          ],
         ),
         body: Column(
           children: [

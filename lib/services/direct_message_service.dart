@@ -644,23 +644,27 @@ class DirectMessageService {
     print('[DM Service] Subscribing to conversation messages with $otherPubkey');
     
     // Get recent messages and all future messages
-    final fiveMinutesAgo = DateTime.now().subtract(const Duration(minutes: 5));
-    final fiveMinutesAgoTimestamp = fiveMinutesAgo.millisecondsSinceEpoch ~/ 1000;
+    final oneMinuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
+    final oneMinuteAgoTimestamp = oneMinuteAgo.millisecondsSinceEpoch ~/ 1000;
     
-    // Subscribe to incoming messages from the other user
+    // Subscribe to incoming messages from the other user with a unique subscription ID
+    final subId1 = 'conv_in_${DateTime.now().millisecondsSinceEpoch}';
     _dmRelayService.subscribeToFilter({
       'kinds': [4],
       'authors': [otherPubkey],
       '#p': [_currentUserPubkey!],
-      'since': fiveMinutesAgoTimestamp,
+      'since': oneMinuteAgoTimestamp,
+      'limit': 20,
     });
     
-    // Subscribe to our sent messages
+    // Subscribe to our sent messages with a unique subscription ID
+    final subId2 = 'conv_out_${DateTime.now().millisecondsSinceEpoch}';
     _dmRelayService.subscribeToFilter({
       'kinds': [4],
       'authors': [_currentUserPubkey!],
       '#p': [otherPubkey],
-      'since': fiveMinutesAgoTimestamp,
+      'since': oneMinuteAgoTimestamp,
+      'limit': 20,
     });
   }
 
