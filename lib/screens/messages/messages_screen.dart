@@ -22,13 +22,23 @@ class _MessagesScreenState extends State<MessagesScreen> {
   final NostrService _nostrService = NostrService();
   List<Conversation> _conversations = [];
   bool _isLoading = true;
+  bool _isLoadingMore = false;
   StreamSubscription? _conversationSubscription;
+  final ScrollController _scrollController = ScrollController();
 
   @override
   void initState() {
     super.initState();
     _dmService = DirectMessageService(_keyService);
     _loadConversations();
+    
+    // Set up scroll listener for pagination
+    _scrollController.addListener(() {
+      if (_scrollController.position.pixels >= 
+          _scrollController.position.maxScrollExtent - 200) {
+        _loadMoreConversations();
+      }
+    });
   }
 
   Future<void> _loadConversations() async {
@@ -49,7 +59,7 @@ class _MessagesScreenState extends State<MessagesScreen> {
       _conversationSubscription = _dmService.conversationsStream.listen((conversations) {
         if (mounted) {
           setState(() {
-            _conversations = conversations;
+            _conversations = _dmService.getPaginatedConversations();
             // Don't set loading to false here, let timeout handle it
           });
         }
@@ -57,12 +67,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
 
       // Get initial conversations
       setState(() {
-        _conversations = _dmService.conversations;
+        _conversations = _dmService.getPaginatedConversations();
       });
       
-      // Set a timeout to stop loading indicator after 3 seconds
-      // This allows showing partial results even if some relays are slow
-      Future.delayed(const Duration(seconds: 3), () {
+      // Set a timeout to stop loading indicator after 2 seconds for faster UI
+      Future.delayed(const Duration(seconds: 2), () {
         if (mounted) {
           setState(() {
             _isLoading = false;
@@ -79,9 +88,37 @@ class _MessagesScreenState extends State<MessagesScreen> {
     }
   }
 
+  Future<void> _loadMoreConversations() async {
+    if (_isLoadingMore || !_dmService.hasMoreConversations) return;
+    
+    setState(() {
+      _isLoadingMore = true;
+    });
+    
+    try {
+      await _dmService.loadConversations(loadMore: true);
+      
+      // Update conversations after loading more
+      if (mounted) {
+        setState(() {
+          _conversations = _dmService.getPaginatedConversations();
+          _isLoadingMore = false;
+        });
+      }
+    } catch (e) {
+      print('Error loading more conversations: $e');
+      if (mounted) {
+        setState(() {
+          _isLoadingMore = false;
+        });
+      }
+    }
+  }
+
   @override
   void dispose() {
     _conversationSubscription?.cancel();
+    _scrollController.dispose();
     super.dispose();
   }
 
@@ -147,8 +184,18 @@ class _MessagesScreenState extends State<MessagesScreen> {
                 : RefreshIndicator(
                     onRefresh: _loadConversations,
                     child: ListView.builder(
-                      itemCount: _conversations.length,
+                      controller: _scrollController,
+                      itemCount: _conversations.length + (_isLoadingMore ? 1 : 0),
                       itemBuilder: (context, index) {
+                        // Show loading indicator at the bottom
+                        if (index == _conversations.length) {
+                          return const Padding(
+                            padding: EdgeInsets.all(16.0),
+                            child: Center(
+                              child: CircularProgressIndicator(),
+                            ),
+                          );
+                        }
                         final conversation = _conversations[index];
                         return Card(
                           margin: const EdgeInsets.symmetric(

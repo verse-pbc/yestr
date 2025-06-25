@@ -11,12 +11,17 @@ import '../models/direct_message.dart';
 import '../models/conversation.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
+import 'dm_relay_service.dart';
+import 'message_cache_service.dart';
 import 'event_signer.dart';
 import 'package:convert/convert.dart';
+import 'package:flutter/foundation.dart';
 
 class DirectMessageService {
   final KeyManagementService _keyManagementService;
   final NostrService _nostrService = NostrService();
+  final DmRelayService _dmRelayService = DmRelayService();
+  final MessageCacheService _cacheService = MessageCacheService();
   
   // Message and conversation management
   final Map<String, List<DirectMessage>> _messagesByPubkey = {};
@@ -24,6 +29,15 @@ class DirectMessageService {
   final _messagesController = StreamController<DirectMessage>.broadcast();
   final _conversationsController = StreamController<List<Conversation>>.broadcast();
   String? _currentUserPubkey;
+  
+  // Pagination
+  static const int _conversationsPerPage = 10;
+  int _currentPage = 0;
+  bool _hasMoreConversations = true;
+  
+  // Message cache
+  final Map<String, String> _decryptedMessageCache = {};
+  static const int _maxCacheSize = 1000;
 
   DirectMessageService(this._keyManagementService);
 
@@ -311,8 +325,8 @@ class DirectMessageService {
     }
   }
 
-  /// Load conversations from Nostr relays
-  Future<void> loadConversations() async {
+  /// Load conversations from Nostr relays with pagination
+  Future<void> loadConversations({bool loadMore = false}) async {
     try {
       _currentUserPubkey = await _keyManagementService.getPublicKey();
       if (_currentUserPubkey == null) {
@@ -320,35 +334,51 @@ class DirectMessageService {
         return;
       }
 
+      if (loadMore) {
+        _currentPage++;
+      } else {
+        _currentPage = 0;
+        _conversations.clear();
+        _messagesByPubkey.clear();
+        
+        // Load cached conversations first for instant UI
+        await _loadCachedConversations();
+      }
+
+      // Connect to optimized DM relays
+      if (!_dmRelayService.isConnected) {
+        print('[DM Service] Connecting to optimized DM relays...');
+        await _dmRelayService.connectForDMs();
+      }
+
       // Get timestamp for 30 days ago
       final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
       final thirtyDaysAgoTimestamp = thirtyDaysAgo.millisecondsSinceEpoch ~/ 1000;
 
-      print('[DM Service] Loading conversations from the last 30 days...');
-      print('[DM Service] Using relays: ${_nostrService.channels.length}');
+      print('[DM Service] Loading conversations page $_currentPage...');
 
-      // Subscribe to encrypted direct messages (kind 4) with time limit
-      final subscription = _nostrService.subscribeToSimpleFilter({
+      // Listen for events from DM relay service
+      _dmRelayService.eventsStream.listen((eventData) {
+        _handleDirectMessageEvent(eventData);
+      });
+
+      // Subscribe to encrypted direct messages (kind 4) with pagination
+      final limit = _conversationsPerPage * 2; // Request more to account for duplicates
+      final offset = _currentPage * _conversationsPerPage;
+      
+      _dmRelayService.subscribeToFilter({
         'kinds': [4],
         '#p': [_currentUserPubkey!], // Messages where we are tagged
         'since': thirtyDaysAgoTimestamp, // Only messages from last 30 days
-        'limit': 200, // Reduced limit for faster loading
+        'limit': limit,
       });
 
-      subscription.listen((event) {
-        _handleDirectMessageEvent(event);
-      });
-
-      // Also subscribe to messages we sent (with smaller limit)
-      final sentSubscription = _nostrService.subscribeToSimpleFilter({
+      // Also subscribe to messages we sent
+      _dmRelayService.subscribeToFilter({
         'kinds': [4],
         'authors': [_currentUserPubkey!],
         'since': thirtyDaysAgoTimestamp, // Only messages from last 30 days
-        'limit': 200, // Reduced limit for faster loading
-      });
-
-      sentSubscription.listen((event) {
-        _handleDirectMessageEvent(event);
+        'limit': limit,
       });
     } catch (e) {
       print('[DM Service] Error loading conversations: $e');
@@ -378,15 +408,40 @@ class DirectMessageService {
         otherPubkey = event.pubkey;
       }
 
-      // Decrypt the message
-      final privateKey = await _keyManagementService.getPrivateKey();
-      if (privateKey == null) return;
+      // Check cache first
+      final cacheKey = '${event.id}_${event.content.hashCode}';
+      String? decryptedContent = _decryptedMessageCache[cacheKey];
+      
+      if (decryptedContent == null) {
+        // Decrypt the message
+        final privateKey = await _keyManagementService.getPrivateKey();
+        if (privateKey == null) return;
 
-      final decryptedContent = await _decryptMessage(
-        event.content,
-        privateKey,
-        otherPubkey,
-      );
+        // Decrypt in background using compute
+        try {
+          decryptedContent = await compute(
+            _decryptMessageInBackground,
+            _DecryptParams(
+              encryptedContent: event.content,
+              privateKey: privateKey,
+              publicKey: otherPubkey,
+            ),
+          );
+          
+          if (decryptedContent != null) {
+            // Cache the decrypted message
+            _addToCache(cacheKey, decryptedContent);
+          }
+        } catch (e) {
+          print('[DM Service] Error decrypting in background: $e');
+          // Fallback to main thread decryption
+          decryptedContent = await _decryptMessage(
+            event.content,
+            privateKey,
+            otherPubkey,
+          );
+        }
+      }
 
       if (decryptedContent == null) return;
 
@@ -417,6 +472,9 @@ class DirectMessageService {
         
         // Update conversation
         await _updateConversation(otherPubkey, message);
+        
+        // Save to cache
+        await _saveMessagesToCache(otherPubkey);
       }
     } catch (e) {
       print('[DM Service] Error handling direct message event: $e');
@@ -527,5 +585,207 @@ class DirectMessageService {
   void dispose() {
     _messagesController.close();
     _conversationsController.close();
+    _dmRelayService.dispose();
   }
+  
+  /// Add to cache with size management
+  void _addToCache(String key, String value) {
+    _decryptedMessageCache[key] = value;
+    
+    // Remove oldest entries if cache is too large
+    if (_decryptedMessageCache.length > _maxCacheSize) {
+      final keysToRemove = _decryptedMessageCache.keys
+          .take(_decryptedMessageCache.length - _maxCacheSize)
+          .toList();
+      for (final key in keysToRemove) {
+        _decryptedMessageCache.remove(key);
+      }
+    }
+  }
+  
+  /// Get paginated conversations
+  List<Conversation> getPaginatedConversations() {
+    final allConversations = conversations;
+    final startIndex = 0;
+    final endIndex = (_currentPage + 1) * _conversationsPerPage;
+    
+    if (endIndex >= allConversations.length) {
+      _hasMoreConversations = false;
+      return allConversations;
+    }
+    
+    return allConversations.sublist(0, endIndex);
+  }
+  
+  /// Check if more conversations can be loaded
+  bool get hasMoreConversations => _hasMoreConversations;
+  
+  /// Load cached conversations for instant UI
+  Future<void> _loadCachedConversations() async {
+    try {
+      final cachedPubkeys = await _cacheService.getCachedConversations();
+      print('[DM Service] Loading ${cachedPubkeys.length} cached conversations');
+      
+      for (final pubkey in cachedPubkeys) {
+        final messages = await _cacheService.loadMessages(pubkey);
+        if (messages.isNotEmpty) {
+          _messagesByPubkey[pubkey] = messages;
+          
+          // Get or create profile
+          NostrProfile? profile = await _nostrService.getProfile(pubkey);
+          if (profile == null) {
+            profile = NostrProfile(
+              pubkey: pubkey,
+              name: pubkey.substring(0, 8),
+              displayName: null,
+              about: null,
+              picture: null,
+              banner: null,
+              nip05: null,
+              lud16: null,
+              website: null,
+              createdAt: DateTime.now(),
+            );
+          }
+          
+          // Create conversation from cached data
+          final lastMessage = messages.last;
+          _conversations[pubkey] = Conversation(
+            profile: profile,
+            lastMessage: lastMessage.content,
+            lastMessageTime: lastMessage.createdAt,
+            unreadCount: messages.where((m) => !m.isFromMe && !m.isRead).length,
+          );
+        }
+      }
+      
+      // Emit cached conversations immediately
+      _conversationsController.add(conversations);
+    } catch (e) {
+      print('[DM Service] Error loading cached conversations: $e');
+    }
+  }
+  
+  /// Save messages to cache
+  Future<void> _saveMessagesToCache(String pubkey) async {
+    try {
+      final messages = _messagesByPubkey[pubkey];
+      if (messages != null && messages.isNotEmpty) {
+        await _cacheService.saveMessages(pubkey, messages);
+      }
+    } catch (e) {
+      print('[DM Service] Error saving messages to cache: $e');
+    }
+  }
+}
+
+/// Parameters for background decryption
+class _DecryptParams {
+  final String encryptedContent;
+  final String privateKey;
+  final String publicKey;
+  
+  _DecryptParams({
+    required this.encryptedContent,
+    required this.privateKey,
+    required this.publicKey,
+  });
+}
+
+/// Top-level function for background decryption
+Future<String?> _decryptMessageInBackground(_DecryptParams params) async {
+  try {
+    // Parse the encrypted content format: <encrypted>?iv=<iv>
+    final parts = params.encryptedContent.split('?iv=');
+    if (parts.length != 2) {
+      return null;
+    }
+
+    final encryptedBase64 = parts[0];
+    final ivBase64 = parts[1];
+
+    final encrypted = base64.decode(encryptedBase64);
+    final iv = base64.decode(ivBase64);
+
+    // Convert hex keys to bytes
+    final privateKeyBytes = Uint8List.fromList(hex.decode(params.privateKey));
+    final publicKeyBytes = Uint8List.fromList(hex.decode(params.publicKey));
+
+    // Generate shared secret using ECDH
+    final sharedSecret = _computeSharedSecretBackground(privateKeyBytes, publicKeyBytes);
+
+    // Decrypt the message
+    final cipher = PaddedBlockCipher('AES/CBC/PKCS7');
+    final cipherParams = ParametersWithIV(KeyParameter(sharedSecret), iv);
+    cipher.init(false, PaddedBlockCipherParameters(cipherParams, null));
+
+    final decrypted = cipher.process(encrypted);
+    return utf8.decode(decrypted);
+  } catch (e) {
+    return null;
+  }
+}
+
+/// Compute shared secret in background
+Uint8List _computeSharedSecretBackground(Uint8List privateKey, Uint8List publicKey) {
+  try {
+    // secp256k1 curve parameters
+    final curve = ECCurve_secp256k1();
+    final domainParams = ECDomainParametersImpl('secp256k1', curve.curve, curve.G, curve.n, curve.h, curve.seed);
+
+    // Create private key parameter
+    final d = BigInt.parse(hex.encode(privateKey), radix: 16);
+    final privKey = ECPrivateKey(d, domainParams);
+
+    // Create public key point
+    ECPoint? pubPoint;
+    if (publicKey.length == 32) {
+      // Nostr public key - just X coordinate
+      final compressed = Uint8List(33);
+      compressed[0] = 0x02; // Assume even Y coordinate
+      compressed.setRange(1, 33, publicKey);
+      pubPoint = curve.curve.decodePoint(compressed);
+    } else if (publicKey.length == 33) {
+      // Already compressed
+      pubPoint = curve.curve.decodePoint(publicKey);
+    } else if (publicKey.length == 65) {
+      // Uncompressed public key
+      pubPoint = curve.curve.decodePoint(publicKey);
+    } else {
+      throw Exception('Invalid public key length: ${publicKey.length}');
+    }
+
+    if (pubPoint == null) {
+      throw Exception('Failed to decode public key point');
+    }
+
+    // Compute shared secret: private key * public point
+    final sharedPoint = pubPoint * d;
+    if (sharedPoint == null) {
+      throw Exception('Failed to compute shared point');
+    }
+
+    // Return X coordinate of shared point as shared secret (NIP-04 spec)
+    final sharedX = sharedPoint.x!.toBigInteger()!;
+    return _bigIntToBytesBackground(sharedX, 32);
+  } catch (e) {
+    throw Exception('Failed to compute shared secret: $e');
+  }
+}
+
+/// Convert BigInt to fixed-length byte array in background
+Uint8List _bigIntToBytesBackground(BigInt value, int length) {
+  final bytes = Uint8List(length);
+  var hexStr = value.toRadixString(16);
+  if (hexStr.length % 2 != 0) {
+    hexStr = '0$hexStr';
+  }
+  final valueBytes = Uint8List.fromList(List<int>.generate(
+    hexStr.length ~/ 2,
+    (i) => int.parse(hexStr.substring(i * 2, i * 2 + 2), radix: 16),
+  ));
+  
+  final offset = length - valueBytes.length;
+  bytes.setRange(offset, length, valueBytes);
+  return bytes;
 }
