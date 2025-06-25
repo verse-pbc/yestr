@@ -18,6 +18,9 @@ import 'package:convert/convert.dart';
 import 'package:flutter/foundation.dart';
 
 class DirectMessageService {
+  // Singleton instance
+  static DirectMessageService? _instance;
+  
   final KeyManagementService _keyManagementService;
   final NostrService _nostrService = NostrService();
   final DmRelayService _dmRelayService = DmRelayService();
@@ -38,8 +41,17 @@ class DirectMessageService {
   // Message cache
   final Map<String, String> _decryptedMessageCache = {};
   static const int _maxCacheSize = 1000;
+  
+  // Stream subscriptions
+  StreamSubscription? _eventsSubscription;
 
-  DirectMessageService(this._keyManagementService);
+  DirectMessageService._internal(this._keyManagementService);
+  
+  // Factory constructor for singleton
+  factory DirectMessageService(KeyManagementService keyManagementService) {
+    _instance ??= DirectMessageService._internal(keyManagementService);
+    return _instance!;
+  }
 
   // Getters for streams and data
   Stream<DirectMessage> get messagesStream => _messagesController.stream;
@@ -357,10 +369,13 @@ class DirectMessageService {
 
       print('[DM Service] Loading conversations page $_currentPage...');
 
-      // Listen for events from DM relay service
-      _dmRelayService.eventsStream.listen((eventData) {
-        _handleDirectMessageEvent(eventData);
-      });
+      // Listen for events from DM relay service (only set up once)
+      if (_eventsSubscription == null) {
+        print('[DM Service] Setting up events subscription...');
+        _eventsSubscription = _dmRelayService.eventsStream.listen((eventData) {
+          _handleDirectMessageEvent(eventData);
+        });
+      }
 
       // Subscribe to encrypted direct messages (kind 4) with pagination
       final limit = _conversationsPerPage * 2; // Request more to account for duplicates
@@ -391,6 +406,8 @@ class DirectMessageService {
       final event = NostrEvent.fromJson(eventData);
       if (event.kind != 4) return;
 
+      print('[DM Service] Handling DM event from ${event.pubkey}');
+
       // Get the other party's pubkey
       String otherPubkey;
       bool isFromMe = event.pubkey == _currentUserPubkey;
@@ -401,11 +418,16 @@ class DirectMessageService {
           (tag) => tag.isNotEmpty && tag[0] == 'p',
           orElse: () => [],
         );
-        if (pTag.isEmpty || pTag.length < 2) return;
+        if (pTag.isEmpty || pTag.length < 2) {
+          print('[DM Service] No p tag found in outgoing message');
+          return;
+        }
         otherPubkey = pTag[1];
+        print('[DM Service] Outgoing message to: $otherPubkey');
       } else {
         // We received this message
         otherPubkey = event.pubkey;
+        print('[DM Service] Incoming message from: $otherPubkey');
       }
 
       // Check cache first
@@ -459,6 +481,7 @@ class DirectMessageService {
       // Store message
       if (!_messagesByPubkey.containsKey(otherPubkey)) {
         _messagesByPubkey[otherPubkey] = [];
+        print('[DM Service] Created new message list for pubkey: $otherPubkey');
       }
       
       // Check if we already have this message
@@ -466,6 +489,7 @@ class DirectMessageService {
       if (!existingMessages.any((m) => m.id == message.id)) {
         existingMessages.add(message);
         existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        print('[DM Service] Added message to conversation with $otherPubkey. Total messages: ${existingMessages.length}');
         
         // Emit the new message
         _messagesController.add(message);
@@ -475,6 +499,8 @@ class DirectMessageService {
         
         // Save to cache
         await _saveMessagesToCache(otherPubkey);
+      } else {
+        print('[DM Service] Message already exists, skipping');
       }
     } catch (e) {
       print('[DM Service] Error handling direct message event: $e');
@@ -525,7 +551,59 @@ class DirectMessageService {
 
   /// Get messages for a specific pubkey
   Future<List<DirectMessage>> getMessagesForPubkey(String pubkey) async {
-    return _messagesByPubkey[pubkey] ?? [];
+    print('[DM Service] Getting messages for pubkey: $pubkey');
+    print('[DM Service] Current _messagesByPubkey keys: ${_messagesByPubkey.keys.toList()}');
+    
+    var messages = _messagesByPubkey[pubkey] ?? [];
+    print('[DM Service] Found ${messages.length} messages in memory for $pubkey');
+    
+    // If no messages in memory, try to load from cache
+    if (messages.isEmpty) {
+      print('[DM Service] No messages in memory, trying cache...');
+      final cachedMessages = await _cacheService.loadMessages(pubkey);
+      if (cachedMessages.isNotEmpty) {
+        print('[DM Service] Found ${cachedMessages.length} messages in cache');
+        _messagesByPubkey[pubkey] = cachedMessages;
+        messages = cachedMessages;
+      }
+    }
+    
+    // If still no messages and we're connected, try to load specifically for this pubkey
+    if (messages.isEmpty && _currentUserPubkey != null && _dmRelayService.isConnected) {
+      print('[DM Service] No messages in cache, attempting to load from relays...');
+      
+      // Subscribe to messages for this specific conversation
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final thirtyDaysAgoTimestamp = thirtyDaysAgo.millisecondsSinceEpoch ~/ 1000;
+      
+      // Subscribe to messages where we are the recipient from this pubkey
+      _dmRelayService.subscribeToFilter({
+        'kinds': [4],
+        'authors': [pubkey],
+        '#p': [_currentUserPubkey!],
+        'since': thirtyDaysAgoTimestamp,
+        'limit': 50,
+      });
+      
+      // Subscribe to messages where we are the sender to this pubkey
+      _dmRelayService.subscribeToFilter({
+        'kinds': [4],
+        'authors': [_currentUserPubkey!],
+        '#p': [pubkey],
+        'since': thirtyDaysAgoTimestamp,
+        'limit': 50,
+      });
+      
+      // Wait a bit for messages to come in
+      await Future.delayed(const Duration(seconds: 2));
+      
+      // Return any messages that came in
+      final updatedMessages = _messagesByPubkey[pubkey] ?? [];
+      print('[DM Service] After loading attempt, found ${updatedMessages.length} messages');
+      return updatedMessages;
+    }
+    
+    return messages;
   }
 
   /// Mark conversation as read
@@ -583,9 +661,16 @@ class DirectMessageService {
   }
 
   void dispose() {
+    _eventsSubscription?.cancel();
     _messagesController.close();
     _conversationsController.close();
     _dmRelayService.dispose();
+  }
+  
+  /// Reset the singleton instance (useful for logout)
+  static void resetInstance() {
+    _instance?.dispose();
+    _instance = null;
   }
   
   /// Add to cache with size management

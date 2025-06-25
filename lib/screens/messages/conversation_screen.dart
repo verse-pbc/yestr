@@ -4,6 +4,7 @@ import '../../models/nostr_profile.dart';
 import '../../services/direct_message_service.dart';
 import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
+import '../../services/message_cache_service.dart';
 import '../../models/direct_message.dart';
 import '../../widgets/gradient_background.dart';
 
@@ -43,18 +44,60 @@ class _ConversationScreenState extends State<ConversationScreen> {
     });
 
     try {
+      print('[ConversationScreen] Loading messages for ${widget.profile.pubkey}');
+      print('[ConversationScreen] Profile name: ${widget.profile.displayNameOrName}');
+      
       // Make sure we're connected
       if (!_nostrService.isConnected) {
+        print('[ConversationScreen] Connecting to Nostr service...');
         await _nostrService.connect();
       }
 
-      // Load messages for this conversation
-      final messages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
+      // First get any existing messages from memory
+      var messages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
+      print('[ConversationScreen] Found ${messages.length} existing messages in memory');
       
-      setState(() {
-        _messages = messages;
-        _isLoading = false;
-      });
+      // If no messages in memory, try to load from cache
+      if (messages.isEmpty) {
+        print('[ConversationScreen] No messages in memory, checking cache...');
+        final cacheService = MessageCacheService();
+        messages = await cacheService.loadMessages(widget.profile.pubkey);
+        print('[ConversationScreen] Found ${messages.length} messages in cache');
+      }
+      
+      // Update UI with cached messages first for better UX
+      if (messages.isNotEmpty) {
+        setState(() {
+          _messages = messages;
+          _isLoading = false;
+        });
+        _scrollToBottom();
+      } else {
+        // If still no messages, wait a bit longer and try from the service
+        print('[ConversationScreen] No messages found, waiting for relay messages...');
+        
+        // Set a timeout to show the empty state after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted && _messages.isEmpty) {
+            setState(() {
+              _isLoading = false;
+            });
+          }
+        });
+        
+        // Try to get messages again after a delay
+        await Future.delayed(const Duration(seconds: 1));
+        messages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
+        
+        if (messages.isNotEmpty) {
+          print('[ConversationScreen] Found ${messages.length} messages after delay');
+          setState(() {
+            _messages = messages;
+            _isLoading = false;
+          });
+          _scrollToBottom();
+        }
+      }
 
       // Scroll to bottom after loading
       _scrollToBottom();
@@ -68,6 +111,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
               msg.senderPubkey == widget.profile.pubkey || 
               msg.recipientPubkey == widget.profile.pubkey)
           .listen((message) {
+        print('[ConversationScreen] New message received: ${message.content}');
         if (mounted) {
           setState(() {
             // Add message if not already present
@@ -80,7 +124,7 @@ class _ConversationScreenState extends State<ConversationScreen> {
         }
       });
     } catch (e) {
-      print('Error loading messages: $e');
+      print('[ConversationScreen] Error loading messages: $e');
       if (mounted) {
         setState(() {
           _isLoading = false;
