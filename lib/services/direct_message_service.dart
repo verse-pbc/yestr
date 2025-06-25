@@ -506,7 +506,7 @@ class DirectMessageService {
         
         // Emit the new message immediately for real-time updates
         _messagesController.add(message);
-        print('[DM Service] Emitted new message to stream: ${message.content.substring(0, 20)}...');
+        print('[DM Service] Emitted new message to stream: ${message.content.substring(0, message.content.length > 20 ? 20 : message.content.length)}...');
         
         // Update conversation
         await _updateConversation(otherPubkey, message);
@@ -555,9 +555,14 @@ class DirectMessageService {
         lastMessageTime: message.createdAt,
         unreadCount: message.isFromMe ? 0 : (message.isRead ? unreadCount : unreadCount + 1),
       );
+      
+      print('[DM Service] Created/Updated conversation for $pubkey');
+      print('[DM Service] Total conversations now: ${_conversations.length}');
 
       // Emit updated conversations list
-      _conversationsController.add(conversations);
+      final convList = conversations;
+      print('[DM Service] Emitting ${convList.length} conversations to stream');
+      _conversationsController.add(convList);
     } catch (e) {
       print('[DM Service] Error updating conversation: $e');
     }
@@ -825,7 +830,7 @@ class DirectMessageService {
             lastMessageTime: lastMessage.createdAt,
             unreadCount: messages.where((m) => !m.isFromMe && !m.isRead).length,
           );
-          print('[DM Service] Created conversation for ${profile.displayNameOrName} with last message: ${lastMessage.content.substring(0, 20)}...');
+          print('[DM Service] Created conversation for ${profile.displayNameOrName} with last message: ${lastMessage.content.substring(0, lastMessage.content.length > 20 ? 20 : lastMessage.content.length)}...');
         }
       }
       
