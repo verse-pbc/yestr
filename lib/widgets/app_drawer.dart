@@ -5,6 +5,7 @@ import '../services/web_background_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/saved_profiles_screen.dart';
 import '../screens/card_overlay_screen.dart';
+import '../screens/messages/messages_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -36,15 +37,22 @@ class _AppDrawerState extends State<AppDrawer> {
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final currentWidget = context.widget.runtimeType.toString();
     
-    // Check if we're on SavedProfilesScreen by checking the widget tree
+    // Check which screen we're on by checking the widget tree
     bool isOnSavedScreen = false;
+    bool isOnMessagesScreen = false;
     context.visitAncestorElements((element) {
-      if (element.widget.runtimeType.toString() == 'SavedProfilesScreen') {
+      final typeName = element.widget.runtimeType.toString();
+      if (typeName == 'SavedProfilesScreen') {
         isOnSavedScreen = true;
+        return false;
+      } else if (typeName == 'MessagesScreen') {
+        isOnMessagesScreen = true;
         return false;
       }
       return true;
     });
+    
+    final isOnDiscoverScreen = !isOnSavedScreen && !isOnMessagesScreen;
 
     return Drawer(
       backgroundColor: const Color(0xFF1a1c22),
@@ -73,7 +81,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   title: 'Discover',
                   onTap: () {
                     Navigator.pop(context); // Close drawer
-                    if (isOnSavedScreen) {
+                    if (!isOnDiscoverScreen) {
                       // Navigate back to Discover screen
                       Navigator.pushReplacement(
                         context,
@@ -83,7 +91,24 @@ class _AppDrawerState extends State<AppDrawer> {
                       );
                     }
                   },
-                  isSelected: !isOnSavedScreen,
+                  isSelected: isOnDiscoverScreen,
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.message,
+                  title: 'Messages',
+                  onTap: () {
+                    Navigator.pop(context);
+                    if (!isOnMessagesScreen) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const MessagesScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  isSelected: isOnMessagesScreen,
                 ),
                 _buildDrawerItem(
                   context,

@@ -7,6 +7,8 @@ import 'package:crypto/crypto.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../models/nostr_event.dart';
+import '../models/direct_message.dart';
+import '../models/conversation.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
 import 'event_signer.dart';
@@ -15,11 +17,42 @@ import 'package:convert/convert.dart';
 class DirectMessageService {
   final KeyManagementService _keyManagementService;
   final NostrService _nostrService = NostrService();
+  
+  // Message and conversation management
+  final Map<String, List<DirectMessage>> _messagesByPubkey = {};
+  final Map<String, Conversation> _conversations = {};
+  final _messagesController = StreamController<DirectMessage>.broadcast();
+  final _conversationsController = StreamController<List<Conversation>>.broadcast();
+  String? _currentUserPubkey;
 
   DirectMessageService(this._keyManagementService);
 
+  // Getters for streams and data
+  Stream<DirectMessage> get messagesStream => _messagesController.stream;
+  Stream<List<Conversation>> get conversationsStream => _conversationsController.stream;
+  List<Conversation> get conversations => _conversations.values.toList()
+    ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+
   /// Send a direct message to a recipient using NIP-04 encryption
-  Future<bool> sendDirectMessage(String content, NostrProfile recipient) async {
+  Future<bool> sendDirectMessage(String recipientPubkey, String content) async {
+    // Create a minimal profile for backward compatibility
+    final recipient = NostrProfile(
+      pubkey: recipientPubkey,
+      name: null,
+      displayName: null,
+      about: null,
+      picture: null,
+      banner: null,
+      nip05: null,
+      lud16: null,
+      website: null,
+      createdAt: DateTime.now(),
+    );
+    return _sendDirectMessage(content, recipient);
+  }
+
+  /// Send a direct message to a recipient using NIP-04 encryption
+  Future<bool> _sendDirectMessage(String content, NostrProfile recipient) async {
     print('[DM Service] Starting sendDirectMessage...');
     print('[DM Service] Content: "$content"');
     print('[DM Service] Recipient: ${recipient.displayNameOrName} (${recipient.pubkey})');
@@ -276,5 +309,223 @@ class DirectMessageService {
       print('[DM Service - Relay] Error connecting to $relayUrl: $e');
       return false;
     }
+  }
+
+  /// Load conversations from Nostr relays
+  Future<void> loadConversations() async {
+    try {
+      _currentUserPubkey = await _keyManagementService.getPublicKey();
+      if (_currentUserPubkey == null) {
+        print('[DM Service] No user public key available');
+        return;
+      }
+
+      // Get timestamp for 30 days ago
+      final thirtyDaysAgo = DateTime.now().subtract(const Duration(days: 30));
+      final thirtyDaysAgoTimestamp = thirtyDaysAgo.millisecondsSinceEpoch ~/ 1000;
+
+      print('[DM Service] Loading conversations from the last 30 days...');
+      print('[DM Service] Using relays: ${_nostrService.channels.length}');
+
+      // Subscribe to encrypted direct messages (kind 4) with time limit
+      final subscription = _nostrService.subscribeToSimpleFilter({
+        'kinds': [4],
+        '#p': [_currentUserPubkey!], // Messages where we are tagged
+        'since': thirtyDaysAgoTimestamp, // Only messages from last 30 days
+        'limit': 200, // Reduced limit for faster loading
+      });
+
+      subscription.listen((event) {
+        _handleDirectMessageEvent(event);
+      });
+
+      // Also subscribe to messages we sent (with smaller limit)
+      final sentSubscription = _nostrService.subscribeToSimpleFilter({
+        'kinds': [4],
+        'authors': [_currentUserPubkey!],
+        'since': thirtyDaysAgoTimestamp, // Only messages from last 30 days
+        'limit': 200, // Reduced limit for faster loading
+      });
+
+      sentSubscription.listen((event) {
+        _handleDirectMessageEvent(event);
+      });
+    } catch (e) {
+      print('[DM Service] Error loading conversations: $e');
+    }
+  }
+
+  /// Handle incoming direct message events
+  void _handleDirectMessageEvent(Map<String, dynamic> eventData) async {
+    try {
+      final event = NostrEvent.fromJson(eventData);
+      if (event.kind != 4) return;
+
+      // Get the other party's pubkey
+      String otherPubkey;
+      bool isFromMe = event.pubkey == _currentUserPubkey;
+      
+      if (isFromMe) {
+        // We sent this message, get recipient from p tag
+        final pTag = event.tags.firstWhere(
+          (tag) => tag.isNotEmpty && tag[0] == 'p',
+          orElse: () => [],
+        );
+        if (pTag.isEmpty || pTag.length < 2) return;
+        otherPubkey = pTag[1];
+      } else {
+        // We received this message
+        otherPubkey = event.pubkey;
+      }
+
+      // Decrypt the message
+      final privateKey = await _keyManagementService.getPrivateKey();
+      if (privateKey == null) return;
+
+      final decryptedContent = await _decryptMessage(
+        event.content,
+        privateKey,
+        otherPubkey,
+      );
+
+      if (decryptedContent == null) return;
+
+      // Create DirectMessage object
+      final message = DirectMessage(
+        id: event.id,
+        content: decryptedContent,
+        senderPubkey: event.pubkey,
+        recipientPubkey: isFromMe ? otherPubkey : _currentUserPubkey!,
+        createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
+        isFromMe: isFromMe,
+        isRead: isFromMe, // Messages we sent are already read
+      );
+
+      // Store message
+      if (!_messagesByPubkey.containsKey(otherPubkey)) {
+        _messagesByPubkey[otherPubkey] = [];
+      }
+      
+      // Check if we already have this message
+      final existingMessages = _messagesByPubkey[otherPubkey]!;
+      if (!existingMessages.any((m) => m.id == message.id)) {
+        existingMessages.add(message);
+        existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        
+        // Emit the new message
+        _messagesController.add(message);
+        
+        // Update conversation
+        await _updateConversation(otherPubkey, message);
+      }
+    } catch (e) {
+      print('[DM Service] Error handling direct message event: $e');
+    }
+  }
+
+  /// Update conversation with new message
+  Future<void> _updateConversation(String pubkey, DirectMessage message) async {
+    try {
+      // Get or create profile
+      NostrProfile? profile = _conversations[pubkey]?.profile;
+      if (profile == null) {
+        profile = await _nostrService.getProfile(pubkey);
+        if (profile == null) {
+          // Create minimal profile
+          profile = NostrProfile(
+            pubkey: pubkey,
+            name: pubkey.substring(0, 8),
+            displayName: null,
+            about: null,
+            picture: null,
+            banner: null,
+            nip05: null,
+            lud16: null,
+            website: null,
+            createdAt: DateTime.now(),
+          );
+        }
+      }
+
+      // Update conversation
+      final existingConversation = _conversations[pubkey];
+      final unreadCount = existingConversation?.unreadCount ?? 0;
+      
+      _conversations[pubkey] = Conversation(
+        profile: profile,
+        lastMessage: message.content,
+        lastMessageTime: message.createdAt,
+        unreadCount: message.isFromMe ? 0 : (message.isRead ? unreadCount : unreadCount + 1),
+      );
+
+      // Emit updated conversations list
+      _conversationsController.add(conversations);
+    } catch (e) {
+      print('[DM Service] Error updating conversation: $e');
+    }
+  }
+
+  /// Get messages for a specific pubkey
+  Future<List<DirectMessage>> getMessagesForPubkey(String pubkey) async {
+    return _messagesByPubkey[pubkey] ?? [];
+  }
+
+  /// Mark conversation as read
+  void markConversationAsRead(String pubkey) {
+    final messages = _messagesByPubkey[pubkey];
+    if (messages != null) {
+      for (var i = 0; i < messages.length; i++) {
+        if (!messages[i].isFromMe && !messages[i].isRead) {
+          messages[i] = messages[i].copyWith(isRead: true);
+        }
+      }
+    }
+
+    final conversation = _conversations[pubkey];
+    if (conversation != null) {
+      _conversations[pubkey] = conversation.copyWith(unreadCount: 0);
+      _conversationsController.add(conversations);
+    }
+  }
+
+  /// Decrypt a message using NIP-04 specification
+  Future<String?> _decryptMessage(String encryptedContent, String privateKey, String publicKey) async {
+    try {
+      // Parse the encrypted content format: <encrypted>?iv=<iv>
+      final parts = encryptedContent.split('?iv=');
+      if (parts.length != 2) {
+        print('[DM Service] Invalid encrypted content format');
+        return null;
+      }
+
+      final encryptedBase64 = parts[0];
+      final ivBase64 = parts[1];
+
+      final encrypted = base64.decode(encryptedBase64);
+      final iv = base64.decode(ivBase64);
+
+      // Convert hex keys to bytes
+      final privateKeyBytes = Uint8List.fromList(hex.decode(privateKey));
+      final publicKeyBytes = Uint8List.fromList(hex.decode(publicKey));
+
+      // Generate shared secret using ECDH
+      final sharedSecret = _computeSharedSecret(privateKeyBytes, publicKeyBytes);
+
+      // Decrypt the message
+      final cipher = PaddedBlockCipher('AES/CBC/PKCS7');
+      final params = ParametersWithIV(KeyParameter(sharedSecret), iv);
+      cipher.init(false, PaddedBlockCipherParameters(params, null));
+
+      final decrypted = cipher.process(encrypted);
+      return utf8.decode(decrypted);
+    } catch (e) {
+      print('[DM Service] Error decrypting message: $e');
+      return null;
+    }
+  }
+
+  void dispose() {
+    _messagesController.close();
+    _conversationsController.close();
   }
 }

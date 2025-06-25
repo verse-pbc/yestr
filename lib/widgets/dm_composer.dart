@@ -68,7 +68,7 @@ class _DirectMessageComposerState extends State<DirectMessageComposer> {
       print('[DM Composer] Using ${_useNip17 ? "NIP-17" : "NIP-04"} encryption');
       final success = _useNip17 
           ? await _nip17DmService.sendDirectMessage(message, widget.recipient)
-          : await _dmService.sendDirectMessage(message, widget.recipient);
+          : await _dmService.sendDirectMessage(widget.recipient.pubkey, message);
       print('[DM Composer] Send result: $success');
       
       if (!success) {
