@@ -56,8 +56,12 @@ class DirectMessageService {
   // Getters for streams and data
   Stream<DirectMessage> get messagesStream => _messagesController.stream;
   Stream<List<Conversation>> get conversationsStream => _conversationsController.stream;
-  List<Conversation> get conversations => _conversations.values.toList()
-    ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+  List<Conversation> get conversations {
+    final convList = _conversations.values.toList()
+      ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+    print('[DM Service] Getting conversations - count: ${convList.length}');
+    return convList;
+  }
 
   /// Send a direct message to a recipient using NIP-04 encryption
   Future<bool> sendDirectMessage(String recipientPubkey, String content) async {
@@ -350,8 +354,8 @@ class DirectMessageService {
         _currentPage++;
       } else {
         _currentPage = 0;
-        _conversations.clear();
-        _messagesByPubkey.clear();
+        // Don't clear existing conversations, just load from cache first
+        // This preserves any existing data while refreshing
         
         // Load cached conversations first for instant UI
         await _loadCachedConversations();
@@ -750,9 +754,11 @@ class DirectMessageService {
     try {
       final cachedPubkeys = await _cacheService.getCachedConversations();
       print('[DM Service] Loading ${cachedPubkeys.length} cached conversations');
+      print('[DM Service] Cached pubkeys: $cachedPubkeys');
       
       for (final pubkey in cachedPubkeys) {
         final messages = await _cacheService.loadMessages(pubkey);
+        print('[DM Service] Loaded ${messages.length} messages for pubkey: $pubkey');
         if (messages.isNotEmpty) {
           _messagesByPubkey[pubkey] = messages;
           
