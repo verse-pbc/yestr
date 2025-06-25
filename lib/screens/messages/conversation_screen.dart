@@ -5,6 +5,7 @@ import '../../services/direct_message_service.dart';
 import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
 import '../../services/message_cache_service.dart';
+import '../../services/conversation_subscription_service.dart';
 import '../../models/direct_message.dart';
 import '../../widgets/gradient_background.dart';
 
@@ -24,18 +25,23 @@ class _ConversationScreenState extends State<ConversationScreen> {
   final KeyManagementService _keyService = KeyManagementService();
   late final DirectMessageService _dmService;
   final NostrService _nostrService = NostrService();
+  final ConversationSubscriptionService _conversationSubscriptionService = ConversationSubscriptionService();
   final TextEditingController _messageController = TextEditingController();
   final ScrollController _scrollController = ScrollController();
   List<DirectMessage> _messages = [];
   bool _isLoading = true;
   bool _isSending = false;
   StreamSubscription? _messageSubscription;
+  String? _conversationSubscriptionId;
+  Timer? _refreshTimer;
 
   @override
   void initState() {
     super.initState();
     _dmService = DirectMessageService(_keyService);
     _loadMessages();
+    _setupRealTimeSubscription();
+    _setupPeriodicRefresh();
   }
 
   Future<void> _loadMessages() async {
@@ -133,6 +139,53 @@ class _ConversationScreenState extends State<ConversationScreen> {
     }
   }
 
+  Future<void> _setupRealTimeSubscription() async {
+    try {
+      final userPubkey = await _keyService.getPublicKey();
+      if (userPubkey == null) return;
+      
+      // Subscribe to real-time updates for this conversation
+      await _conversationSubscriptionService.subscribeToConversation(
+        userPubkey,
+        widget.profile.pubkey,
+      );
+      
+      // Also tell the DM service to subscribe specifically to this conversation
+      await _dmService.subscribeToConversationMessages(widget.profile.pubkey);
+      
+      print('[ConversationScreen] Set up real-time subscription for conversation with ${widget.profile.displayNameOrName}');
+    } catch (e) {
+      print('[ConversationScreen] Error setting up real-time subscription: $e');
+    }
+  }
+  
+  void _setupPeriodicRefresh() {
+    // Refresh messages every 10 seconds to catch any missed messages
+    _refreshTimer = Timer.periodic(const Duration(seconds: 10), (_) {
+      _refreshMessages();
+    });
+  }
+  
+  Future<void> _refreshMessages() async {
+    try {
+      print('[ConversationScreen] Refreshing messages...');
+      
+      // Get fresh messages from the service
+      final freshMessages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
+      
+      if (mounted && freshMessages.length > _messages.length) {
+        setState(() {
+          _messages = freshMessages;
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
+        _scrollToBottom();
+        print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
+      }
+    } catch (e) {
+      print('[ConversationScreen] Error refreshing messages: $e');
+    }
+  }
+
   void _scrollToBottom() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_scrollController.hasClients) {
@@ -185,6 +238,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
   @override
   void dispose() {
     _messageSubscription?.cancel();
+    _refreshTimer?.cancel();
+    _conversationSubscriptionService.dispose();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();

@@ -491,8 +491,9 @@ class DirectMessageService {
         existingMessages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
         print('[DM Service] Added message to conversation with $otherPubkey. Total messages: ${existingMessages.length}');
         
-        // Emit the new message
+        // Emit the new message immediately for real-time updates
         _messagesController.add(message);
+        print('[DM Service] Emitted new message to stream: ${message.content.substring(0, 20)}...');
         
         // Update conversation
         await _updateConversation(otherPubkey, message);
@@ -605,6 +606,36 @@ class DirectMessageService {
     
     return messages;
   }
+  
+  /// Subscribe to real-time messages for a specific conversation
+  Future<void> subscribeToConversationMessages(String otherPubkey) async {
+    if (_currentUserPubkey == null || !_dmRelayService.isConnected) {
+      print('[DM Service] Cannot subscribe: not connected or no user pubkey');
+      return;
+    }
+    
+    print('[DM Service] Subscribing to conversation messages with $otherPubkey');
+    
+    // Get recent messages and all future messages
+    final fiveMinutesAgo = DateTime.now().subtract(const Duration(minutes: 5));
+    final fiveMinutesAgoTimestamp = fiveMinutesAgo.millisecondsSinceEpoch ~/ 1000;
+    
+    // Subscribe to incoming messages from the other user
+    _dmRelayService.subscribeToFilter({
+      'kinds': [4],
+      'authors': [otherPubkey],
+      '#p': [_currentUserPubkey!],
+      'since': fiveMinutesAgoTimestamp,
+    });
+    
+    // Subscribe to our sent messages
+    _dmRelayService.subscribeToFilter({
+      'kinds': [4],
+      'authors': [_currentUserPubkey!],
+      '#p': [otherPubkey],
+      'since': fiveMinutesAgoTimestamp,
+    });
+  }
 
   /// Mark conversation as read
   void markConversationAsRead(String pubkey) {
@@ -622,6 +653,40 @@ class DirectMessageService {
       _conversations[pubkey] = conversation.copyWith(unreadCount: 0);
       _conversationsController.add(conversations);
     }
+  }
+  
+  /// Subscribe to messages for a specific conversation in real-time
+  Future<void> subscribeToConversationMessages(String otherPubkey) async {
+    if (_currentUserPubkey == null) {
+      _currentUserPubkey = await _keyManagementService.getPublicKey();
+      if (_currentUserPubkey == null) return;
+    }
+    
+    // Make sure we're connected
+    if (!_dmRelayService.isConnected) {
+      await _dmRelayService.connectForDMs();
+    }
+    
+    print('[DM Service] Setting up real-time subscription for conversation with $otherPubkey');
+    
+    // Get current timestamp to fetch only new messages
+    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    
+    // Subscribe to new messages from the other user
+    _dmRelayService.subscribeToFilter({
+      'kinds': [4],
+      'authors': [otherPubkey],
+      '#p': [_currentUserPubkey!],
+      'since': now - 60, // Start from 1 minute ago to catch recent messages
+    });
+    
+    // Subscribe to our messages to them
+    _dmRelayService.subscribeToFilter({
+      'kinds': [4],
+      'authors': [_currentUserPubkey!],
+      '#p': [otherPubkey],
+      'since': now - 60,
+    });
   }
 
   /// Decrypt a message using NIP-04 specification
