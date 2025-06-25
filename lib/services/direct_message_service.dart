@@ -783,21 +783,6 @@ class DirectMessageService {
     return allConversations.sublist(0, endIndex);
   }
   
-  /// Debug method to check cache state
-  Future<void> debugCacheState() async {
-    print('[DM Service] === Debug Cache State ===');
-    print('[DM Service] In-memory conversations: ${_conversations.length}');
-    print('[DM Service] In-memory messages by pubkey: ${_messagesByPubkey.keys.toList()}');
-    
-    final cachedPubkeys = await _cacheService.getCachedConversations();
-    print('[DM Service] Cached conversation pubkeys: $cachedPubkeys');
-    
-    for (final pubkey in cachedPubkeys) {
-      final messages = await _cacheService.loadMessages(pubkey);
-      print('[DM Service] Cache - Pubkey $pubkey has ${messages.length} messages');
-    }
-    print('[DM Service] === End Debug ===');
-  }
   
   /// Check if more conversations can be loaded
   bool get hasMoreConversations => _hasMoreConversations;
