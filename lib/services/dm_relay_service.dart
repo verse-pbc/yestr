@@ -53,6 +53,7 @@ class DmRelayService {
       const Duration(seconds: 2), // Quick timeout for each batch
       onTimeout: () {
         print('[DM Relay Service] Connection timeout reached');
+        return []; // Return empty list on timeout
       },
     );
   }
