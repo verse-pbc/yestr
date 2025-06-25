@@ -49,7 +49,12 @@ class DirectMessageService {
   
   // Factory constructor for singleton
   factory DirectMessageService(KeyManagementService keyManagementService) {
-    _instance ??= DirectMessageService._internal(keyManagementService);
+    if (_instance == null) {
+      print('[DM Service] Creating new DirectMessageService instance');
+      _instance = DirectMessageService._internal(keyManagementService);
+    } else {
+      print('[DM Service] Returning existing DirectMessageService instance');
+    }
     return _instance!;
   }
 
@@ -344,9 +349,11 @@ class DirectMessageService {
   /// Load conversations from Nostr relays with pagination
   Future<void> loadConversations({bool loadMore = false}) async {
     try {
+      print('[DM Service] loadConversations called with loadMore=$loadMore');
       _currentUserPubkey = await _keyManagementService.getPublicKey();
+      print('[DM Service] Current user pubkey: $_currentUserPubkey');
       if (_currentUserPubkey == null) {
-        print('[DM Service] No user public key available');
+        print('[DM Service] No user public key available - user not logged in?');
         return;
       }
 
@@ -358,7 +365,9 @@ class DirectMessageService {
         // This preserves any existing data while refreshing
         
         // Load cached conversations first for instant UI
+        print('[DM Service] Loading cached conversations...');
         await _loadCachedConversations();
+        print('[DM Service] After loading cache, conversations count: ${_conversations.length}');
       }
 
       // Connect to optimized DM relays
@@ -717,6 +726,33 @@ class DirectMessageService {
     _instance = null;
   }
   
+  /// Debug method to check cache state
+  Future<void> debugCacheState() async {
+    print('[DM Service] === DEBUG CACHE STATE ===');
+    print('[DM Service] In-memory conversations: ${_conversations.length}');
+    print('[DM Service] In-memory messages by pubkey: ${_messagesByPubkey.keys.toList()}');
+    
+    final cachedPubkeys = await _cacheService.getCachedConversations();
+    print('[DM Service] Cached conversation pubkeys: $cachedPubkeys');
+    
+    for (final pubkey in cachedPubkeys) {
+      final messages = await _cacheService.loadMessages(pubkey);
+      print('[DM Service] Cached messages for $pubkey: ${messages.length}');
+    }
+    
+    print('[DM Service] Current user pubkey: $_currentUserPubkey');
+    print('[DM Service] Is connected to DM relays: ${_dmRelayService.isConnected}');
+    print('[DM Service] ========================');
+    
+    // Try to force load from cache
+    if (cachedPubkeys.isNotEmpty && _conversations.isEmpty) {
+      print('[DM Service] Force loading from cache...');
+      await _loadCachedConversations();
+      print('[DM Service] After force load: ${_conversations.length} conversations');
+      _conversationsController.add(conversations);
+    }
+  }
+  
   /// Add to cache with size management
   void _addToCache(String key, String value) {
     _decryptedMessageCache[key] = value;
@@ -735,6 +771,7 @@ class DirectMessageService {
   /// Get paginated conversations
   List<Conversation> getPaginatedConversations() {
     final allConversations = conversations;
+    print('[DM Service] getPaginatedConversations - total: ${allConversations.length}, page: $_currentPage');
     final startIndex = 0;
     final endIndex = (_currentPage + 1) * _conversationsPerPage;
     
@@ -744,6 +781,22 @@ class DirectMessageService {
     }
     
     return allConversations.sublist(0, endIndex);
+  }
+  
+  /// Debug method to check cache state
+  Future<void> debugCacheState() async {
+    print('[DM Service] === Debug Cache State ===');
+    print('[DM Service] In-memory conversations: ${_conversations.length}');
+    print('[DM Service] In-memory messages by pubkey: ${_messagesByPubkey.keys.toList()}');
+    
+    final cachedPubkeys = await _cacheService.getCachedConversations();
+    print('[DM Service] Cached conversation pubkeys: $cachedPubkeys');
+    
+    for (final pubkey in cachedPubkeys) {
+      final messages = await _cacheService.loadMessages(pubkey);
+      print('[DM Service] Cache - Pubkey $pubkey has ${messages.length} messages');
+    }
+    print('[DM Service] === End Debug ===');
   }
   
   /// Check if more conversations can be loaded
@@ -787,13 +840,18 @@ class DirectMessageService {
             lastMessageTime: lastMessage.createdAt,
             unreadCount: messages.where((m) => !m.isFromMe && !m.isRead).length,
           );
+          print('[DM Service] Created conversation for ${profile.displayNameOrName} with last message: ${lastMessage.content.substring(0, 20)}...');
         }
       }
+      
+      print('[DM Service] Total conversations in memory: ${_conversations.length}');
+      print('[DM Service] Emitting conversations to stream...');
       
       // Emit cached conversations immediately
       _conversationsController.add(conversations);
     } catch (e) {
       print('[DM Service] Error loading cached conversations: $e');
+      print('[DM Service] Stack trace: ${StackTrace.current}');
     }
   }
   

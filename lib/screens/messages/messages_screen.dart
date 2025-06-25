@@ -30,6 +30,10 @@ class _MessagesScreenState extends State<MessagesScreen> {
   void initState() {
     super.initState();
     _dmService = DirectMessageService(_keyService);
+    
+    // Debug: Check if service has existing conversations
+    print('[MessagesScreen] Initial conversations count: ${_dmService.conversations.length}');
+    
     _loadConversations();
     
     // Set up scroll listener for pagination
@@ -57,9 +61,11 @@ class _MessagesScreenState extends State<MessagesScreen> {
       
       // Listen to conversation updates
       _conversationSubscription = _dmService.conversationsStream.listen((conversations) {
+        print('[MessagesScreen] Received ${conversations.length} conversations from stream');
         if (mounted) {
           setState(() {
             _conversations = _dmService.getPaginatedConversations();
+            print('[MessagesScreen] Updated UI with ${_conversations.length} conversations');
             // Don't set loading to false here, let timeout handle it
           });
         }
@@ -68,16 +74,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
       // Get initial conversations
       setState(() {
         _conversations = _dmService.getPaginatedConversations();
+        print('[MessagesScreen] Got ${_conversations.length} conversations from service');
       });
       
-      // Set a timeout to stop loading indicator after 2 seconds for faster UI
-      Future.delayed(const Duration(seconds: 2), () {
-        if (mounted) {
-          setState(() {
-            _isLoading = false;
-          });
-        }
-      });
+      // Check if we have cached conversations immediately
+      if (_conversations.isNotEmpty) {
+        setState(() {
+          _isLoading = false;
+        });
+      } else {
+        // Set a timeout to stop loading indicator after 3 seconds
+        Future.delayed(const Duration(seconds: 3), () {
+          if (mounted) {
+            setState(() {
+              _isLoading = false;
+              // Force get conversations one more time
+              _conversations = _dmService.getPaginatedConversations();
+              print('[MessagesScreen] After timeout, conversations: ${_conversations.length}');
+            });
+          }
+        });
+      }
     } catch (e) {
       print('Error loading conversations: $e');
       if (mounted) {
@@ -149,6 +166,27 @@ class _MessagesScreenState extends State<MessagesScreen> {
           title: const Text('Messages'),
           backgroundColor: const Color(0xFF1a1c22),
           elevation: 0,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.bug_report),
+              onPressed: () async {
+                await _dmService.debugCacheState();
+                
+                // Force reload from cache
+                setState(() {
+                  _conversations = _dmService.getPaginatedConversations();
+                });
+                
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Debug: ${_conversations.length} conversations in UI')),
+                );
+              },
+            ),
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadConversations,
+            ),
+          ],
         ),
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
