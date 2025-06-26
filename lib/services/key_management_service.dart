@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:dart_nostr/dart_nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:bech32/bech32.dart';
+import 'package:convert/convert.dart';
+import 'package:bip340/bip340.dart' as bip340;
 
 class KeyManagementService {
   static const String _privateKeyKey = 'nostr_private_key';
@@ -12,6 +13,9 @@ class KeyManagementService {
   static final KeyManagementService _instance = KeyManagementService._internal();
   factory KeyManagementService() => _instance;
   KeyManagementService._internal();
+  
+  // Static getter for consistency with other services
+  static KeyManagementService get instance => _instance;
 
   /// Check if a private key is stored
   Future<bool> hasPrivateKey() async {
@@ -73,6 +77,11 @@ class KeyManagementService {
     }
   }
 
+  /// Save private key (alias for storePrivateKey)
+  Future<void> savePrivateKey(String privateKey) async {
+    return storePrivateKey(privateKey);
+  }
+  
   /// Store a private key securely
   /// Handles both nsec and hex formats
   Future<void> storePrivateKey(String privateKey) async {
@@ -101,9 +110,7 @@ class KeyManagementService {
       }
       
       // Generate public key from private key
-      final publicKey = Nostr.instance.keysService.derivePublicKey(
-        privateKey: hexPrivateKey,
-      );
+      final publicKey = bip340.getPublicKey(hexPrivateKey);
       
       // Store both keys
       final prefs = await SharedPreferences.getInstance();

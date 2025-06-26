@@ -1,18 +1,36 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:dart_nostr/dart_nostr.dart' as dart_nostr;
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'package:http/http.dart' as http;
+// import 'package:ndk/ndk.dart'; // Temporarily disabled
 import '../models/nostr_profile.dart';
 import '../models/nostr_event.dart';
 import 'key_management_service.dart';
-import 'event_signer.dart';
+import 'event_signer.dart' as local_event_signer;
+// import 'ndk/ndk_adapter_service.dart'; // Temporarily disabled
+// import 'ndk/ndk_service.dart'; // Temporarily disabled
 
 class NostrService {
   // Singleton instance
   static final NostrService _instance = NostrService._internal();
   factory NostrService() => _instance;
-  NostrService._internal();
+  NostrService._internal() {
+    // Initialize NDK adapter on construction
+    _initializeNdk();
+  }
+  
+  void _initializeNdk() {
+    // NDK initialization disabled until API compatibility is fixed
+    _useNdk = false;
+    /*
+    try {
+      _ndkAdapter = NdkAdapterService.instance;
+    } catch (e) {
+      print('NostrService: Failed to initialize NDK adapter: $e');
+      _useNdk = false;
+    }
+    */
+  }
   
   final KeyManagementService _keyService = KeyManagementService();
   final _profilesController = StreamController<NostrProfile>.broadcast();
@@ -20,6 +38,12 @@ class NostrService {
   final List<NostrProfile> _profiles = [];
   StreamSubscription? _profileSubscription;
   bool _isConnected = false;
+  
+  // NDK support - temporarily disabled
+  // late final NdkAdapterService _ndkAdapter;
+  bool _useNdk = false; // Feature flag to enable/disable NDK - disabled for now until we fix API compatibility
+  
+  // Legacy WebSocket support (for gradual migration)
   final List<WebSocketChannel> _channels = [];
   final List<String> _relayUrls = [
     'wss://relay.damus.io',
@@ -32,12 +56,52 @@ class NostrService {
   Stream<NostrProfile> get profilesStream => _profilesController.stream;
   Stream<Map<String, dynamic>> get eventsStream => _eventsController.stream;
   List<NostrProfile> get profiles => List.unmodifiable(_profiles);
-  bool get isConnected => _isConnected;
+  bool get isConnected => _isConnected; // _useNdk ? _ndkAdapter.isInitialized : _isConnected;
   List<WebSocketChannel> get channels => _channels;
 
   Future<void> connect() async {
+    if (_useNdk) {
+      // Use NDK for connection
+      // NDK temporarily disabled
+      /*
+      if (_ndkAdapter.isInitialized) {
+        print('NostrService: Already connected via NDK');
+        return;
+      }
+      */
+      
+      // NDK temporarily disabled
+      /*
+      try {
+        _ndkAdapter = NdkAdapterService.instance;
+        await _ndkAdapter.initialize();
+        print('NostrService: Connected via NDK');
+        
+        // Load account if available
+        final privateKey = await _keyService.getPrivateKey();
+        if (privateKey != null && privateKey.isNotEmpty) {
+          await _ndkAdapter.login(privateKey);
+        }
+        
+        // Request profiles after connection
+        await _requestProfiles();
+      } catch (e) {
+        print('NostrService: NDK connection error: $e');
+        print('NostrService: Falling back to legacy WebSocket connection');
+        _useNdk = false;
+        await _connectLegacy();
+      }
+      */
+      _useNdk = false;
+      await _connectLegacy();
+    } else {
+      await _connectLegacy();
+    }
+  }
+  
+  Future<void> _connectLegacy() async {
     if (_isConnected) {
-      print('NostrService: Already connected');
+      print('NostrService: Already connected (legacy)');
       return;
     }
     
@@ -149,32 +213,109 @@ class NostrService {
         }
       }
       
-      // Fallback to regular profile request
-      final subscriptionId = 'profiles_limit_${DateTime.now().millisecondsSinceEpoch}';
-      final filter = {
-        "kinds": [0],
-        "limit": limit,
-      };
-      
-      if (authors != null && authors.isNotEmpty) {
-        filter["authors"] = authors;
+      // Use NDK or legacy based on flag
+      // NDK temporarily disabled
+      /*
+      if (_useNdk && _ndkAdapter.isInitialized) {
+        await _requestProfilesWithLimitNdk(limit: limit, authors: authors);
+      } else {
+        await _requestProfilesWithLimitLegacy(limit: limit, authors: authors);
       }
-      
-      final request = [
-        "REQ",
-        subscriptionId,
-        filter,
-      ];
-      
-      // Send request to all channels
-      for (final channel in _channels) {
-        channel.sink.add(jsonEncode(request));
-      }
-      
-      print('NostrService: Sent limited profile request to ${_channels.length} relays');
+      */
+      await _requestProfilesWithLimitLegacy(limit: limit, authors: authors);
     } catch (e) {
       print('NostrService: Error requesting profiles: $e');
     }
+  }
+  
+  // NDK temporarily disabled
+  /*
+  Future<void> _requestProfilesWithLimitNdk({
+    required int limit,
+    List<String>? authors,
+  }) async {
+    try {
+      print('NostrService: Requesting profiles via NDK');
+      
+      // Query profiles using NDK
+      final filters = [
+        Filter(
+          kinds: [Metadata.KIND],
+          limit: limit,
+          authors: authors,
+        ),
+      ];
+      
+      final subscription = _ndkAdapter.events.queryEvents(filters: filters).listen(
+        (event) {
+          try {
+            // Convert NDK event to our format
+            final eventMap = {
+              'id': event.id,
+              'pubkey': event.pubkey,
+              'created_at': event.createdAt,
+              'kind': event.kind,
+              'tags': event.tags,
+              'content': event.content,
+              'sig': event.sig,
+            };
+            
+            if (event.kind == 0) {
+              final profile = NostrProfile.fromNostrEvent(eventMap);
+              if (!_profiles.any((p) => p.pubkey == profile.pubkey)) {
+                _profiles.add(profile);
+                _profilesController.add(profile);
+              }
+            }
+            
+            // Emit to events stream
+            _eventsController.add(eventMap);
+          } catch (e) {
+            print('Error processing NDK event: $e');
+          }
+        },
+        onError: (error) {
+          print('NDK query error: $error');
+        },
+      );
+      
+      // Cancel subscription after timeout
+      Timer(const Duration(seconds: 3), () {
+        subscription.cancel();
+      });
+    } catch (e) {
+      print('NostrService: Error in NDK profile request: $e');
+    }
+  }
+  */
+  
+  Future<void> _requestProfilesWithLimitLegacy({
+    required int limit,
+    List<String>? authors,
+  }) async {
+    // Legacy implementation
+    final subscriptionId = 'profiles_limit_${DateTime.now().millisecondsSinceEpoch}';
+    final filter = {
+      "kinds": [0],
+      "limit": limit,
+    };
+    
+    if (authors != null && authors.isNotEmpty) {
+      filter["authors"] = authors;
+    }
+    
+    final request = [
+      "REQ",
+      subscriptionId,
+      filter,
+    ];
+    
+    // Send request to all channels
+    for (final channel in _channels) {
+      channel.sink.add(jsonEncode(request));
+    }
+    
+    print('NostrService: Sent limited profile request to ${_channels.length} relays');
   }
 
   Future<NostrProfile?> getProfile(String pubkey) async {
@@ -200,42 +341,158 @@ class NostrService {
         return cached;
       }
       
-      // Query for latest profile
-      final subscriptionId = 'profile_${DateTime.now().millisecondsSinceEpoch}';
-      final request = [
-        "REQ",
-        subscriptionId,
-        {
-          "kinds": [0],
-          "authors": [pubkey],
-          "limit": 1,
-        }
-      ];
-      
-      // Send request to all channels
-      for (final channel in _channels) {
-        channel.sink.add(jsonEncode(request));
+      // Use NDK or legacy based on flag
+      // NDK temporarily disabled
+      /*
+      if (_useNdk && _ndkAdapter.isInitialized) {
+        return await _getProfileNdk(pubkey);
+      } else {
+        return await _getProfileLegacy(pubkey);
       }
-      
-      // Wait a bit for response
-      await Future.delayed(const Duration(seconds: 2));
-      
-      // Check if profile was received
-      final updated = _profiles.firstWhere(
-        (p) => p.pubkey == pubkey,
-        orElse: () => cached,
-      );
-      
-      return updated.name != null ? updated : null;
+      */
+      return await _getProfileLegacy(pubkey);
     } catch (e) {
       print('NostrService: Error getting profile: $e');
       return null;
     }
   }
+  
+  // NDK temporarily disabled
+  /*
+  Future<NostrProfile?> _getProfileNdk(String pubkey) async {
+    try {
+      final profile = await _ndkAdapter.profiles.fetchProfile(pubkey);
+      if (profile != null) {
+        // Update cache
+        final index = _profiles.indexWhere((p) => p.pubkey == pubkey);
+        if (index != -1) {
+          _profiles[index] = profile;
+        } else {
+          _profiles.add(profile);
+        }
+        _profilesController.add(profile);
+      }
+      return profile;
+    } catch (e) {
+      print('NostrService: Error getting profile via NDK: $e');
+      return null;
+    }
+  }
+  */
+  
+  Future<NostrProfile?> _getProfileLegacy(String pubkey) async {
+    // Legacy implementation
+    final subscriptionId = 'profile_${DateTime.now().millisecondsSinceEpoch}';
+    final request = [
+      "REQ",
+      subscriptionId,
+      {
+        "kinds": [0],
+        "authors": [pubkey],
+        "limit": 1,
+      }
+    ];
+    
+    // Send request to all channels
+    for (final channel in _channels) {
+      channel.sink.add(jsonEncode(request));
+    }
+    
+    // Wait a bit for response
+    await Future.delayed(const Duration(seconds: 2));
+    
+    // Check if profile was received
+    final updated = _profiles.firstWhere(
+      (p) => p.pubkey == pubkey,
+      orElse: () => NostrProfile(
+        pubkey: pubkey,
+        name: null,
+        displayName: null,
+        about: null,
+        picture: null,
+        banner: null,
+        nip05: null,
+        lud16: null,
+        website: null,
+      ),
+    );
+    
+    return updated.name != null ? updated : null;
+  }
 
   Future<List<NostrEvent>> getUserNotes(String pubkey, {int limit = 20}) async {
     try {
-      print('NostrService: Getting notes for user $pubkey');
+      // NDK temporarily disabled
+      /*
+      if (_useNdk && _ndkAdapter.isInitialized) {
+        return await _getUserNotesNdk(pubkey, limit: limit);
+      } else {
+        return await _getUserNotesLegacy(pubkey, limit: limit);
+      }
+      */
+      return await _getUserNotesLegacy(pubkey, limit: limit);
+    } catch (e) {
+      print('NostrService: Error getting user notes: $e');
+      return [];
+    }
+  }
+  
+  // NDK temporarily disabled
+  /*
+  Future<List<NostrEvent>> _getUserNotesNdk(String pubkey, {required int limit}) async {
+    try {
+      print('NostrService: Getting notes for user $pubkey via NDK');
+      
+      final notes = <NostrEvent>[];
+      final completer = Completer<List<NostrEvent>>();
+      
+      final filters = [
+        Filter(
+          kinds: [1], // Text notes
+          authors: [pubkey],
+          limit: limit,
+        ),
+      ];
+      
+      final subscription = _ndkAdapter.events.queryEvents(filters: filters).listen(
+        (event) {
+          notes.add(event);
+          print('NostrService: Received note ${notes.length}/${limit} from ${pubkey.substring(0, 8)}...');
+        },
+        onError: (error) {
+          print('NostrService: Error querying notes: $error');
+        },
+        onDone: () {
+          // Sort by created_at descending (newest first)
+          notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          print('NostrService: Returning ${notes.length} notes for $pubkey');
+          if (!completer.isCompleted) {
+            completer.complete(notes);
+          }
+        },
+      );
+      
+      // Set timeout
+      Timer(const Duration(seconds: 3), () {
+        subscription.cancel();
+        if (!completer.isCompleted) {
+          notes.sort((a, b) => b.createdAt.compareTo(a.createdAt));
+          completer.complete(notes);
+        }
+      });
+      
+      return await completer.future;
+    } catch (e) {
+      print('NostrService: Error getting user notes via NDK: $e');
+      return [];
+    }
+  }
+  */
+  
+  Future<List<NostrEvent>> _getUserNotesLegacy(String pubkey, {required int limit}) async {
+    // Legacy implementation
+    try {
+      print('NostrService: Getting notes for user $pubkey (legacy)');
       final subscriptionId = 'notes_${DateTime.now().millisecondsSinceEpoch}';
       final request = [
         "REQ",
@@ -293,12 +550,57 @@ class NostrService {
       
       return await completer.future;
     } catch (e) {
-      print('NostrService: Error getting user notes: $e');
+      print('NostrService: Error getting user notes (legacy): $e');
       return [];
     }
   }
 
   Future<bool> publishEvent(Map<String, dynamic> eventData) async {
+    try {
+      // NDK temporarily disabled
+      /*
+      if (_useNdk && _ndkAdapter.isInitialized) {
+        return await _publishEventNdk(eventData);
+      } else {
+        return await _publishEventLegacy(eventData);
+      }
+      */
+      return await _publishEventLegacy(eventData);
+    } catch (e) {
+      print('NostrService: Error publishing event: $e');
+      return false;
+    }
+  }
+  
+  // NDK temporarily disabled
+  /*
+  Future<bool> _publishEventNdk(Map<String, dynamic> eventData) async {
+    try {
+      // Create NostrEvent from eventData
+      final event = NostrEvent(
+        id: '', // Will be generated
+        pubkey: _ndkAdapter.currentUserPubkey ?? '',
+        createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        kind: eventData['kind'] ?? 1,
+        tags: List<List<String>>.from(eventData['tags'] ?? []),
+        content: eventData['content'] ?? '',
+        sig: '', // Will be generated
+      );
+      
+      final success = await _ndkAdapter.events.publishEvent(event);
+      if (success) {
+        print('NostrService: Published event via NDK');
+      }
+      return success;
+    } catch (e) {
+      print('NostrService: Error publishing event via NDK: $e');
+      return false;
+    }
+  }
+  */
+  
+  Future<bool> _publishEventLegacy(Map<String, dynamic> eventData) async {
+    // Legacy implementation
     try {
       // Get keys for signing
       final keys = await _keyService.getKeys();
@@ -307,7 +609,7 @@ class NostrService {
       }
       
       // Create signed event using EventSigner static method
-      final signedEvent = EventSigner.createSignedEvent(
+      final signedEvent = local_event_signer.EventSigner.createSignedEvent(
         privateKeyHex: keys['private']!,
         publicKeyHex: keys['public']!,
         kind: eventData['kind'] ?? 1,
@@ -328,7 +630,7 @@ class NostrService {
       print('NostrService: Published event with id: ${signedEvent['id']}');
       return true;
     } catch (e) {
-      print('NostrService: Error publishing event: $e');
+      print('NostrService: Error publishing legacy event: $e');
       return false;
     }
   }
@@ -350,6 +652,62 @@ class NostrService {
   }
 
   Stream<Map<String, dynamic>> subscribeToSimpleFilter(Map<String, dynamic> filter) {
+    // NDK temporarily disabled
+    /*
+    if (_useNdk && _ndkAdapter.isInitialized) {
+      return _subscribeToSimpleFilterNdk(filter);
+    } else {
+      return _subscribeToSimpleFilterLegacy(filter);
+    }
+    */
+    return _subscribeToSimpleFilterLegacy(filter);
+  }
+  
+  // NDK temporarily disabled
+  /*
+  Stream<Map<String, dynamic>> _subscribeToSimpleFilterNdk(Map<String, dynamic> filter) {
+    final controller = StreamController<Map<String, dynamic>>.broadcast();
+    
+    try {
+      // Convert filter to NDK Filter
+      final ndkFilter = Filter(
+        kinds: filter['kinds'] != null ? List<int>.from(filter['kinds']) : null,
+        authors: filter['authors'] != null ? List<String>.from(filter['authors']) : null,
+        limit: filter['limit'] as int?,
+      );
+      
+      final subscription = _ndkAdapter.events.subscribeToEvents(
+        filters: [ndkFilter],
+      ).listen(
+        (event) {
+          // Convert to Map format
+          final eventData = {
+            'id': event.id,
+            'pubkey': event.pubkey,
+            'created_at': event.createdAt,
+            'kind': event.kind,
+            'tags': event.tags,
+            'content': event.content,
+            'sig': event.sig,
+          };
+          controller.add(eventData);
+        },
+        onError: (error) => controller.addError(error),
+      );
+      
+      controller.onCancel = () {
+        subscription.cancel();
+      };
+    } catch (e) {
+      controller.addError('Error setting up NDK subscription: $e');
+    }
+    
+    return controller.stream;
+  }
+  */
+  
+  Stream<Map<String, dynamic>> _subscribeToSimpleFilterLegacy(Map<String, dynamic> filter) {
+    // Legacy implementation
     final controller = StreamController<Map<String, dynamic>>.broadcast();
     final subscriptionId = 'sub_${DateTime.now().millisecondsSinceEpoch}';
     
@@ -619,13 +977,24 @@ class NostrService {
 
   void disconnect() {
     _profileSubscription?.cancel();
-    for (final channel in _channels) {
-      channel.sink.close();
-    }
-    _channels.clear();
+    
+    // NDK temporarily disabled
+    /*
+    if (_useNdk && _ndkAdapter.isInitialized) {
+      // NDK manages its own connections
+      print('NostrService: Disconnected (NDK)');
+    } else {
+    */
+      // Legacy disconnect
+      for (final channel in _channels) {
+        channel.sink.close();
+      }
+      _channels.clear();
+      _isConnected = false;
+      print('NostrService: Disconnected (legacy)');
+    // }  // closing brace for if statement
+    
     _profiles.clear();
-    _isConnected = false;
-    print('NostrService: Disconnected');
   }
 
   
@@ -633,5 +1002,8 @@ class NostrService {
     _profilesController.close();
     _eventsController.close();
     disconnect();
+    
+    // Note: We don't dispose the NDK adapter here because it's a singleton
+    // that might be used by other services
   }
 }

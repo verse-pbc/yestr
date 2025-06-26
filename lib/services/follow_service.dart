@@ -1,6 +1,5 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
-import 'package:dart_nostr/dart_nostr.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';

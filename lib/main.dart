@@ -2,14 +2,15 @@ import 'package:flutter/material.dart';
 import 'screens/login_screen.dart';
 import 'widgets/responsive_wrapper.dart';
 import 'services/nostr_band_api_service.dart';
-import 'services/ndk/ndk_adapter_service.dart';
-import 'services/ndk/migration_helper.dart';
+// import 'services/ndk/ndk_adapter_service.dart'; // Temporarily disabled
+// import 'services/ndk/migration_helper.dart'; // Temporarily disabled
 
 void main() async {
   // Ensure Flutter binding is initialized
   WidgetsFlutterBinding.ensureInitialized();
   
-  // Initialize NDK
+  // Initialize NDK - temporarily disabled
+  /*
   try {
     final ndkAdapter = NdkAdapterService.instance;
     await ndkAdapter.initialize();
@@ -21,6 +22,7 @@ void main() async {
   } catch (e) {
     debugPrint('Error initializing NDK: $e');
   }
+  */
   
   // Start prefetching trending profiles immediately when the app launches
   NostrBandApiService().prefetchProfiles();
