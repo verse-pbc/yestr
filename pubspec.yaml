@@ -49,8 +49,14 @@ dependencies:
   http: ^1.4.0
   ndk: ^0.4.0
   ndk_rust_verifier: ^0.4.0
+  isar: ^3.1.0+1
+  isar_flutter_libs: ^3.1.0+1
+  path_provider: ^2.1.1
+  logger: ^2.0.2+1
 
 dev_dependencies:
+  isar_generator: ^3.1.0+1
+  build_runner: ^2.4.6
   flutter_test:
     sdk: flutter
 

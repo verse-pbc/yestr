@@ -3,6 +3,8 @@ import 'package:ndk_rust_verifier/ndk_rust_verifier.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
 import '../key_management_service.dart';
+import '../database/isar_database_service.dart';
+import '../cache/ndk_cache_manager.dart';
 
 /// Core service for managing NDK (Nostr Development Kit) integration
 /// This service initializes and configures NDK with JIT engine for efficient relay management
@@ -28,14 +30,18 @@ class NdkService {
     if (_ndk != null) return;
     
     try {
+      // Initialize Isar database first
+      final database = IsarDatabaseService.instance;
+      await database.initialize();
+      
       // Create NDK configuration with JIT engine and Rust verifier for performance
       final config = NdkConfig(
         // Use JIT engine for optimal relay management (outbox model)
         engine: NdkEngine.JIT,
         // Use Rust verifier for better performance on signature verification
         eventVerifier: RustEventVerifier(),
-        // Use memory cache for now, can be replaced with persistent cache later
-        cache: MemCacheManager(),
+        // Use our custom Isar cache manager
+        cache: NdkCacheManager(database),
         // Bootstrap relays for initial connection
         bootstrapRelays: [
           'wss://relay.damus.io',
@@ -55,7 +61,7 @@ class NdkService {
       // Load account if available
       await _loadAccount();
       
-      debugPrint('NDK initialized successfully with JIT engine');
+      debugPrint('NDK initialized successfully with JIT engine and Isar cache');
     } catch (e) {
       debugPrint('Error initializing NDK: $e');
       rethrow;
