@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../models/direct_message.dart';
 import '../models/nostr_profile.dart';
-import 'direct_message_service.dart';
+import 'direct_message_service_v2.dart';
 import 'key_management_service.dart';
 import 'nostr_service.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
 import '../../models/nostr_profile.dart';
-import '../../services/direct_message_service.dart';
+import '../../services/direct_message_service_v2.dart';
 import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
 import '../../services/message_cache_service.dart';

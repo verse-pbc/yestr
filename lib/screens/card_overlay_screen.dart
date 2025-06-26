@@ -17,7 +17,7 @@ import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
 import '../widgets/gradient_background.dart';
 import '../services/key_management_service.dart';
-import '../services/direct_message_service.dart';
+import '../services/direct_message_service_v2.dart';
 import '../services/dm_notification_service.dart';
 import '../screens/messages/conversation_screen.dart';
 

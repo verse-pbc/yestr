@@ -1,6 +1,7 @@
 import 'package:ndk/ndk.dart';
 import 'package:ndk_rust_verifier/ndk_rust_verifier.dart';
 import 'package:flutter/foundation.dart';
+import 'package:logger/logger.dart';
 import '../key_management_service.dart';
 
 /// Core service for managing NDK (Nostr Development Kit) integration
@@ -30,7 +31,7 @@ class NdkService {
       // Create NDK configuration with JIT engine and Rust verifier for performance
       final config = NdkConfig(
         // Use JIT engine for optimal relay management (outbox model)
-        engine: Engine.JIT,
+        engine: NdkEngine.JIT,
         // Use Rust verifier for better performance on signature verification
         eventVerifier: RustEventVerifier(),
         // Use memory cache for now, can be replaced with persistent cache later
@@ -45,7 +46,7 @@ class NdkService {
           'wss://relay.primal.net',
         ],
         // Configure logging
-        logLevel: kDebugMode ? LogLevel.trace : LogLevel.warning,
+        logLevel: kDebugMode ? Level.trace : Level.warning,
       );
       
       // Initialize NDK
@@ -67,8 +68,10 @@ class NdkService {
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
         // Create account from private key
-        final keyPair = KeyPair.fromPrivateKey(privateKey);
-        _ndk!.accounts.login(keyPair);
+        final pubkey = await _keyManagementService.getPublicKey();
+        if (pubkey != null) {
+          _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
+        }
         debugPrint('Account loaded successfully');
       } catch (e) {
         debugPrint('Error loading account: $e');
@@ -83,8 +86,10 @@ class NdkService {
     }
     
     try {
-      final keyPair = KeyPair.fromPrivateKey(privateKey);
-      _ndk!.accounts.login(keyPair);
+      // Extract pubkey from private key using Bip340EventSigner
+      final signer = Bip340EventSigner(privateKey: privateKey, publicKey: null);
+      final pubkey = signer.getPublicKey();
+      _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
       
       // Save to key management service
       await _keyManagementService.savePrivateKey(privateKey);
@@ -117,10 +122,10 @@ class NdkService {
   bool get isInitialized => _ndk != null;
   
   /// Check if user is logged in
-  bool get isLoggedIn => _ndk?.accounts.currentAccount != null;
+  bool get isLoggedIn => _ndk?.accounts.isLoggedIn ?? false;
   
   /// Get current user's public key
-  String? get currentUserPubkey => _ndk?.accounts.currentAccount?.pubkey;
+  String? get currentUserPubkey => _ndk?.accounts.getPublicKey();
   
   /// Dispose NDK service
   void dispose() {

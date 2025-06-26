@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/nostr_profile.dart';
-import '../services/direct_message_service.dart';
+import '../services/direct_message_service_v2.dart';
 import '../services/nip17_dm_service.dart';
 import '../services/key_management_service.dart';
 

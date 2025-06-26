@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
 import '../services/web_background_service.dart';
-import '../services/direct_message_service.dart';
+import '../services/direct_message_service_v2.dart';
 import '../services/dm_notification_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/saved_profiles_screen.dart';
