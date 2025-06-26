@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bech32/bech32.dart';
-import 'dart:typed_data';
 import 'dart:async';
 import 'dart:convert';
 import 'package:convert/convert.dart';
@@ -17,6 +16,10 @@ import '../widgets/profile_card.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
 import '../widgets/gradient_background.dart';
+import '../services/key_management_service.dart';
+import '../services/direct_message_service.dart';
+import '../services/dm_notification_service.dart';
+import '../screens/messages/conversation_screen.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -30,19 +33,153 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final NostrService _nostrService = NostrService();
   final NostrBandApiService _nostrBandApiService = NostrBandApiService();
   final FollowService _followService = FollowService();
+  final KeyManagementService _keyService = KeyManagementService();
   late final SavedProfilesService _savedProfilesService;
+  late final DirectMessageService _dmService;
+  late final DmNotificationService _notificationService;
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
-  int _currentIndex = 0;
+  StreamSubscription? _notificationSubscription;
 
   @override
   void initState() {
     super.initState();
-    // Initialize saved profiles service
+    // Initialize services
     _savedProfilesService = SavedProfilesService(_nostrService);
+    _dmService = DirectMessageService(_keyService);
+    _notificationService = DmNotificationService(_dmService, _keyService);
+    
     // Set main background when screen loads
     WebBackgroundService.setMainBackground();
+    
+    // Initialize notifications
+    _initializeNotifications();
+    
+    // Start loading conversations in the background immediately after login
+    _preloadConversations();
+    
     _loadProfiles();
+  }
+  
+  Future<void> _preloadConversations() async {
+    try {
+      print('[CardOverlayScreen] Starting background conversation preload...');
+      
+      // Check if user is logged in
+      final hasPrivateKey = await _keyService.hasPrivateKey();
+      if (!hasPrivateKey) {
+        print('[CardOverlayScreen] User not logged in, skipping conversation preload');
+        return;
+      }
+      
+      // Wait a bit to ensure NostrService is connected
+      // This runs in parallel with profile loading
+      Future.delayed(const Duration(seconds: 1), () async {
+        try {
+          // Ensure NostrService is connected
+          if (!_nostrService.isConnected) {
+            print('[CardOverlayScreen] Waiting for NostrService connection...');
+            await _nostrService.connect();
+          }
+          
+          // Load conversations in the background without blocking UI
+          // This will populate the cache so when the user opens Messages, 
+          // conversations are already loaded
+          print('[CardOverlayScreen] Starting conversation load...');
+          await _dmService.loadConversations();
+          
+          print('[CardOverlayScreen] Background conversation loading completed');
+          print('[CardOverlayScreen] Preloaded ${_dmService.conversations.length} conversations');
+          
+          // Also subscribe to conversation updates to keep them fresh
+          _dmService.conversationsStream.listen((conversations) {
+            print('[CardOverlayScreen] Background update: ${conversations.length} conversations available');
+          });
+        } catch (error) {
+          print('[CardOverlayScreen] Error in delayed conversation loading: $error');
+        }
+      });
+    } catch (e) {
+      print('[CardOverlayScreen] Error in preloadConversations: $e');
+    }
+  }
+  
+  Future<void> _initializeNotifications() async {
+    await _notificationService.initialize();
+    
+    // Clear current conversation since we're on discover screen
+    _notificationService.setCurrentConversation(null);
+    
+    // Listen for DM notifications
+    _notificationSubscription = _notificationService.notificationStream.listen((notification) {
+      if (mounted) {
+        // Show snackbar with custom action
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: Colors.grey[800],
+                  backgroundImage: notification.senderProfile.picture != null
+                      ? NetworkImage(notification.senderProfile.picture!)
+                      : null,
+                  child: notification.senderProfile.picture == null
+                      ? Text(
+                          notification.senderProfile.displayNameOrName[0].toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        )
+                      : null,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'New message from ${notification.senderProfile.displayNameOrName}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        notification.message.content.length > 50
+                            ? '${notification.message.content.substring(0, 50)}...'
+                            : notification.message.content,
+                        style: const TextStyle(
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            action: SnackBarAction(
+              label: 'VIEW',
+              onPressed: () {
+                // Navigate to conversation
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => ConversationScreen(
+                      profile: notification.senderProfile,
+                    ),
+                  ),
+                );
+              },
+            ),
+            duration: const Duration(seconds: 4),
+            backgroundColor: const Color(0xFF2a2c32),
+          ),
+        );
+      }
+    });
   }
 
   Future<void> _loadProfiles() async {
@@ -329,6 +466,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
 
   @override
   void dispose() {
+    _notificationSubscription?.cancel();
     controller.dispose();
     // Don't dispose singleton services
     super.dispose();
@@ -646,16 +784,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   ) {
     final profile = _profiles[previousIndex];
     
-    // Update current index
-    if (currentIndex != null) {
-      setState(() {
-        _currentIndex = currentIndex;
-      });
-      
-      // Check if we're running low on profiles and fetch more
-      if (_profiles.length - currentIndex < 10) {
-        _loadMoreProfiles();
-      }
+    // Check if we're running low on profiles and fetch more
+    if (currentIndex != null && _profiles.length - currentIndex < 10) {
+      _loadMoreProfiles();
     }
     
     String action;
@@ -734,9 +865,6 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
     int currentIndex,
     CardSwiperDirection direction,
   ) {
-    setState(() {
-      _currentIndex = currentIndex;
-    });
     return true;
   }
 

@@ -6,6 +6,7 @@ import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
 import '../../services/message_cache_service.dart';
 import '../../services/conversation_subscription_service.dart';
+import '../../services/dm_notification_service.dart';
 import '../../models/direct_message.dart';
 import '../../widgets/gradient_background.dart';
 
@@ -24,6 +25,7 @@ class ConversationScreen extends StatefulWidget {
 class _ConversationScreenState extends State<ConversationScreen> {
   final KeyManagementService _keyService = KeyManagementService();
   late final DirectMessageService _dmService;
+  late final DmNotificationService _notificationService;
   final NostrService _nostrService = NostrService();
   final ConversationSubscriptionService _conversationSubscriptionService = ConversationSubscriptionService();
   final TextEditingController _messageController = TextEditingController();
@@ -40,6 +42,11 @@ class _ConversationScreenState extends State<ConversationScreen> {
   void initState() {
     super.initState();
     _dmService = DirectMessageService(_keyService);
+    _notificationService = DmNotificationService(_dmService, _keyService);
+    
+    // Tell notification service we're in this conversation
+    _notificationService.setCurrentConversation(widget.profile.pubkey);
+    
     _loadMessages();
     _setupRealTimeSubscription();
     _setupPeriodicRefresh();
@@ -203,13 +210,8 @@ class _ConversationScreenState extends State<ConversationScreen> {
           _scrollToBottom();
           print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
           
-          // Show a snackbar when new messages arrive
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('New message received'),
-              duration: Duration(seconds: 2),
-            ),
-          );
+          // Don't show snackbar here since we're already in the conversation
+          // The notification service will handle snackbars when not in conversation
         } else {
           print('[ConversationScreen] No new messages found');
         }
@@ -276,6 +278,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
 
   @override
   void dispose() {
+    // Clear current conversation in notification service
+    _notificationService.setCurrentConversation(null);
+    
     _messageSubscription?.cancel();
     _refreshTimer?.cancel();
     _conversationSubscriptionService.dispose();

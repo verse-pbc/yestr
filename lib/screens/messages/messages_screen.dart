@@ -3,6 +3,7 @@ import 'dart:async';
 import '../../services/direct_message_service.dart';
 import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
+import '../../services/dm_notification_service.dart';
 import '../../models/nostr_profile.dart';
 import '../../models/conversation.dart';
 import '../../widgets/app_drawer.dart';
@@ -19,6 +20,7 @@ class MessagesScreen extends StatefulWidget {
 class _MessagesScreenState extends State<MessagesScreen> {
   final KeyManagementService _keyService = KeyManagementService();
   late final DirectMessageService _dmService;
+  late final DmNotificationService _notificationService;
   final NostrService _nostrService = NostrService();
   List<Conversation> _conversations = [];
   bool _isLoading = true;
@@ -30,11 +32,16 @@ class _MessagesScreenState extends State<MessagesScreen> {
   void initState() {
     super.initState();
     _dmService = DirectMessageService(_keyService);
+    _notificationService = DmNotificationService(_dmService, _keyService);
+    
+    // Clear current conversation since we're on messages list
+    _notificationService.setCurrentConversation(null);
     
     // Debug: Check if service has existing conversations
     print('[MessagesScreen] Initial conversations count: ${_dmService.conversations.length}');
     
-    _loadConversations();
+    // Check login status and preloaded conversations
+    _checkAndLoadConversations();
     
     // Set up scroll listener for pagination
     _scrollController.addListener(() {
@@ -45,12 +52,62 @@ class _MessagesScreenState extends State<MessagesScreen> {
     });
   }
 
+  Future<void> _checkAndLoadConversations() async {
+    // Check if user is logged in first
+    final hasPrivateKey = await _keyService.hasPrivateKey();
+    if (!hasPrivateKey) {
+      print('[MessagesScreen] User not logged in, showing empty state');
+      setState(() {
+        _isLoading = false;
+      });
+      return;
+    }
+    
+    // Check if we already have conversations preloaded
+    if (_dmService.conversations.isNotEmpty) {
+      print('[MessagesScreen] Found ${_dmService.conversations.length} preloaded conversations');
+      setState(() {
+        _conversations = _dmService.getPaginatedConversations();
+        _isLoading = false;
+      });
+      
+      // Still set up listener for updates
+      _conversationSubscription = _dmService.conversationsStream.listen((conversations) {
+        print('[MessagesScreen] Received ${conversations.length} conversations from stream');
+        if (mounted) {
+          setState(() {
+            _conversations = _dmService.getPaginatedConversations();
+            print('[MessagesScreen] Updated UI with ${_conversations.length} conversations');
+          });
+        }
+      });
+      
+      // Also trigger a refresh in the background to get any new messages
+      _dmService.loadConversations().catchError((error) {
+        print('[MessagesScreen] Background refresh error: $error');
+      });
+    } else {
+      // No preloaded conversations, load normally
+      _loadConversations();
+    }
+  }
+
   Future<void> _loadConversations() async {
     setState(() {
       _isLoading = true;
     });
 
     try {
+      // Check if user is logged in first
+      final hasPrivateKey = await _keyService.hasPrivateKey();
+      if (!hasPrivateKey) {
+        print('[MessagesScreen] User not logged in, cannot load conversations');
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+      
       // Make sure we're connected to Nostr
       if (!_nostrService.isConnected) {
         await _nostrService.connect();
@@ -191,33 +248,41 @@ class _MessagesScreenState extends State<MessagesScreen> {
         body: _isLoading
             ? const Center(child: CircularProgressIndicator())
             : _conversations.isEmpty
-                ? Center(
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          Icons.message_outlined,
-                          size: 64,
-                          color: Colors.white.withOpacity(0.3),
+                ? FutureBuilder<bool>(
+                    future: _keyService.hasPrivateKey(),
+                    builder: (context, snapshot) {
+                      final isLoggedIn = snapshot.data ?? false;
+                      return Center(
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(
+                              Icons.message_outlined,
+                              size: 64,
+                              color: Colors.white.withOpacity(0.3),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              isLoggedIn ? 'No conversations yet' : 'Login required',
+                              style: TextStyle(
+                                fontSize: 18,
+                                color: Colors.white.withOpacity(0.5),
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              isLoggedIn 
+                                ? 'Start swiping to connect with people!'
+                                : 'Please login to view your messages',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.white.withOpacity(0.3),
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          'No conversations yet',
-                          style: TextStyle(
-                            fontSize: 18,
-                            color: Colors.white.withOpacity(0.5),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Start swiping to connect with people!',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withOpacity(0.3),
-                          ),
-                        ),
-                      ],
-                    ),
+                      );
+                    },
                   )
                 : RefreshIndicator(
                     onRefresh: _loadConversations,

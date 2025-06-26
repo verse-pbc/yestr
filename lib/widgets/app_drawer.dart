@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
 import '../services/web_background_service.dart';
+import '../services/direct_message_service.dart';
+import '../services/dm_notification_service.dart';
 import '../screens/login_screen.dart';
 import '../screens/saved_profiles_screen.dart';
 import '../screens/card_overlay_screen.dart';
@@ -16,12 +18,36 @@ class AppDrawer extends StatefulWidget {
 
 class _AppDrawerState extends State<AppDrawer> {
   final KeyManagementService _keyService = KeyManagementService();
+  late final DirectMessageService _dmService;
+  late final DmNotificationService _notificationService;
   bool _isLoggedIn = false;
+  int _unreadCount = 0;
 
   @override
   void initState() {
     super.initState();
+    _dmService = DirectMessageService(_keyService);
+    _notificationService = DmNotificationService(_dmService, _keyService);
     _checkLoginStatus();
+    _initializeNotifications();
+  }
+  
+  Future<void> _initializeNotifications() async {
+    await _notificationService.initialize();
+    
+    // Listen to unread count changes
+    _notificationService.totalUnreadStream.listen((count) {
+      if (mounted) {
+        setState(() {
+          _unreadCount = count;
+        });
+      }
+    });
+    
+    // Get initial unread count
+    setState(() {
+      _unreadCount = _notificationService.totalUnreadCount;
+    });
   }
 
   Future<void> _checkLoginStatus() async {
@@ -33,10 +59,6 @@ class _AppDrawerState extends State<AppDrawer> {
 
   @override
   Widget build(BuildContext context) {
-    // Detect current route
-    final currentRoute = ModalRoute.of(context)?.settings.name;
-    final currentWidget = context.widget.runtimeType.toString();
-    
     // Check which screen we're on by checking the widget tree
     bool isOnSavedScreen = false;
     bool isOnMessagesScreen = false;
@@ -97,6 +119,7 @@ class _AppDrawerState extends State<AppDrawer> {
                   context,
                   icon: Icons.message,
                   title: 'Messages',
+                  badge: _unreadCount > 0 ? _unreadCount.toString() : null,
                   onTap: () {
                     Navigator.pop(context);
                     if (!isOnMessagesScreen) {
@@ -180,6 +203,7 @@ class _AppDrawerState extends State<AppDrawer> {
     required String title,
     required VoidCallback onTap,
     bool isSelected = false,
+    String? badge,
   }) {
     if (isSelected) {
       // Special styling for selected item (Discover)
@@ -191,9 +215,40 @@ class _AppDrawerState extends State<AppDrawer> {
         ),
         child: ListTile(
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-          leading: Icon(
-            icon,
-            color: Colors.black,
+          leading: Stack(
+            clipBehavior: Clip.none,
+            children: [
+              Icon(
+                icon,
+                color: Colors.black,
+              ),
+              if (badge != null)
+                Positioned(
+                  right: -8,
+                  top: -8,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    constraints: const BoxConstraints(
+                      minWidth: 20,
+                      minHeight: 20,
+                    ),
+                    child: Center(
+                      child: Text(
+                        badge,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
           title: Text(
             title,
@@ -209,9 +264,40 @@ class _AppDrawerState extends State<AppDrawer> {
     
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 24),
-      leading: Icon(
-        icon,
-        color: Colors.white70,
+      leading: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          Icon(
+            icon,
+            color: Colors.white70,
+          ),
+          if (badge != null)
+            Positioned(
+              right: -8,
+              top: -8,
+              child: Container(
+                padding: const EdgeInsets.all(4),
+                decoration: BoxDecoration(
+                  color: Colors.red,
+                  shape: BoxShape.circle,
+                ),
+                constraints: const BoxConstraints(
+                  minWidth: 20,
+                  minHeight: 20,
+                ),
+                child: Center(
+                  child: Text(
+                    badge,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
       title: Text(
         title,
