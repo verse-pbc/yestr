@@ -67,7 +67,7 @@ class NdkService {
     final privateKey = await _keyManagementService.getPrivateKey();
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
-        // Create account from private key
+        // Login with private key
         final pubkey = await _keyManagementService.getPublicKey();
         if (pubkey != null) {
           _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
@@ -87,7 +87,7 @@ class NdkService {
     
     try {
       // Extract pubkey from private key using Bip340EventSigner
-      final signer = Bip340EventSigner(privateKey: privateKey, publicKey: null);
+      final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
       final pubkey = signer.getPublicKey();
       _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
       

@@ -12,7 +12,7 @@ class FollowAdapter {
   Future<Set<String>> getFollowing() async {
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
+      final currentPubkey = ndk.accounts.getPublicKey();
       
       if (currentPubkey == null) return {};
       
@@ -20,7 +20,7 @@ class FollowAdapter {
       
       if (contactList == null) return {};
       
-      return contactList.contacts.map((contact) => contact.pubkey).toSet();
+      return contactList.contacts.toSet();
     } catch (e) {
       print('Error getting following list: $e');
       return {};
@@ -36,13 +36,13 @@ class FollowAdapter {
       final events = await ndk.requests.query(
         filters: [
           Filter(
-            kinds: [ContactList.KIND],
+            kinds: [ContactList.kKind],
             pTags: [pubkey],
           ),
         ],
       ).stream.toList();
       
-      return events.map((event) => event.pubkey).toSet();
+      return events.map((event) => event.pubKey).toSet();
     } catch (e) {
       print('Error getting followers: $e');
       return {};
@@ -53,37 +53,9 @@ class FollowAdapter {
   Future<bool> followUser(String pubkey) async {
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
       
-      if (currentPubkey == null) return false;
-      
-      // Get current contact list
-      final currentContacts = await ndk.follows.getContactList(currentPubkey);
-      
-      // Create new contact to add
-      final newContact = Contact(
-        pubkey: pubkey,
-        relay: null, // Let NDK figure out the best relay
-        petname: null,
-      );
-      
-      // Add to contacts
-      final updatedContacts = currentContacts?.contacts.toList() ?? [];
-      
-      // Check if already following
-      if (updatedContacts.any((c) => c.pubkey == pubkey)) {
-        return true; // Already following
-      }
-      
-      updatedContacts.add(newContact);
-      
-      // Broadcast updated contact list
-      await ndk.follows.broadcastContactList(
-        ContactList(
-          contacts: updatedContacts,
-          createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        ),
-      );
+      // Use NDK's built-in method to add a contact
+      await ndk.follows.broadcastAddContact(pubkey);
       
       return true;
     } catch (e) {
@@ -96,27 +68,9 @@ class FollowAdapter {
   Future<bool> unfollowUser(String pubkey) async {
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
       
-      if (currentPubkey == null) return false;
-      
-      // Get current contact list
-      final currentContacts = await ndk.follows.getContactList(currentPubkey);
-      
-      if (currentContacts == null) return false;
-      
-      // Remove from contacts
-      final updatedContacts = currentContacts.contacts
-          .where((contact) => contact.pubkey != pubkey)
-          .toList();
-      
-      // Broadcast updated contact list
-      await ndk.follows.broadcastContactList(
-        ContactList(
-          contacts: updatedContacts,
-          createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        ),
-      );
+      // Use NDK's built-in method to remove a contact
+      await ndk.follows.broadcastRemoveContact(pubkey);
       
       return true;
     } catch (e) {
@@ -140,7 +94,7 @@ class FollowAdapter {
   Future<Set<String>> getMutualFollows() async {
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
+      final currentPubkey = ndk.accounts.getPublicKey();
       
       if (currentPubkey == null) return {};
       
@@ -164,7 +118,7 @@ class FollowAdapter {
     
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
+      final currentPubkey = ndk.accounts.getPublicKey();
       
       if (currentPubkey == null) {
         controller.addError('No logged in user');
@@ -176,7 +130,7 @@ class FollowAdapter {
         filters: [
           Filter(
             authors: [currentPubkey],
-            kinds: [ContactList.KIND],
+            kinds: [ContactList.kKind],
           ),
         ],
       ).stream.listen((event) {

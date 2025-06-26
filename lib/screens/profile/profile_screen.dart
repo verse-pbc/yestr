@@ -3,10 +3,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/nostr_profile.dart';
 import '../../models/nostr_event.dart';
 import '../../services/nostr_service.dart';
-import '../../services/reaction_service.dart';
+import '../../services/service_migration_helper.dart';
 import '../../services/key_management_service.dart';
 import '../../services/saved_profiles_service.dart';
-import '../../services/follow_service.dart';
 import '../../widgets/formatted_content.dart';
 import '../../widgets/share_profile_sheet.dart';
 import '../../widgets/share_note_sheet.dart';
@@ -31,9 +30,9 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final NostrService _nostrService = NostrService();
-  final ReactionService _reactionService = ReactionService();
+  late final dynamic _reactionService;
   final KeyManagementService _keyService = KeyManagementService();
-  final FollowService _followService = FollowService();
+  late final dynamic _followService;
   late final SavedProfilesService _savedProfilesService;
   Future<List<NostrEvent>>? _notesFuture;
   final Set<String> _likedNotes = {}; // Track liked notes locally
@@ -44,7 +43,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
   @override
   void initState() {
     super.initState();
-    // Initialize saved profiles service with NostrService instance
+    // Initialize services using migration helper
+    _reactionService = ServiceMigrationHelper.getReactionService();
+    _followService = ServiceMigrationHelper.getFollowService();
     _savedProfilesService = SavedProfilesService(_nostrService);
     print('ProfileScreen: Loading notes for ${widget.profile.displayNameOrName} (${widget.profile.pubkey})');
     _notesFuture = _nostrService.getUserNotes(widget.profile.pubkey, limit: 10);

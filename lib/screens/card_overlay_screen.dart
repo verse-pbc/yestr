@@ -9,7 +9,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/nostr_band_api_service.dart';
-import '../services/follow_service.dart';
+import '../services/service_migration_helper.dart';
 import '../services/saved_profiles_service.dart';
 import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
@@ -32,7 +32,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
   final NostrBandApiService _nostrBandApiService = NostrBandApiService();
-  final FollowService _followService = FollowService();
+  late final dynamic _followService;
   final KeyManagementService _keyService = KeyManagementService();
   late final SavedProfilesService _savedProfilesService;
   late final DirectMessageService _dmService;
@@ -45,6 +45,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   void initState() {
     super.initState();
     // Initialize services
+    _followService = ServiceMigrationHelper.getFollowService();
     _savedProfilesService = SavedProfilesService(_nostrService);
     _dmService = DirectMessageService(_keyService);
     _notificationService = DmNotificationService(_dmService, _keyService);
