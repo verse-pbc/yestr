@@ -47,19 +47,33 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      final loginStartTime = DateTime.now();
+      debugPrint('⏱️ [${loginStartTime.toIso8601String()}] Starting login process...');
+      
       // Store the private key
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Storing private key...');
       await _keyService.storePrivateKey(privateKey);
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Private key stored (took ${DateTime.now().difference(loginStartTime).inMilliseconds}ms)');
       
       // Also login to NDK with the private key
-      debugPrint('Logging into NDK...');
+      final ndkLoginStart = DateTime.now();
+      debugPrint('⏱️ [${ndkLoginStart.toIso8601String()}] Logging into NDK...');
       await _ndkService.login(privateKey);
-      debugPrint('NDK login successful');
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] NDK login successful (took ${DateTime.now().difference(ndkLoginStart).inMilliseconds}ms)');
+      
+      // Verify NDK login
+      final ndkPubkey = _ndkService.currentUserPubkey;
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] NDK current user pubkey: $ndkPubkey');
       
       // Load contact list from relays after login
-      debugPrint('Loading contact list from relays...');
+      final contactListStart = DateTime.now();
+      debugPrint('⏱️ [${contactListStart.toIso8601String()}] Loading contact list from relays...');
       final followService = FollowServiceNdk();
       await followService.loadContactListFromRelays();
-      debugPrint('Contact list loaded');
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Contact list loaded (took ${DateTime.now().difference(contactListStart).inMilliseconds}ms)');
+      
+      final totalLoginTime = DateTime.now().difference(loginStartTime);
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] ✅ Login process completed (total: ${totalLoginTime.inMilliseconds}ms)');
       
       // Navigate to main screen
       if (mounted) {
@@ -70,6 +84,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] ❌ Login error: $e');
       _showError('Invalid private key: ${e.toString()}');
     } finally {
       if (mounted) {

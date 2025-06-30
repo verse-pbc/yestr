@@ -119,6 +119,20 @@ class NdkService {
       final signer = Bip340EventSigner(privateKey: hexPrivateKey, publicKey: '');
       final pubkey = signer.getPublicKey();
       
+      debugPrint('Attempting to login with pubkey: $pubkey');
+      
+      // Check if already logged in with this pubkey
+      if (_ndk!.accounts.isLoggedIn && _ndk!.accounts.getPublicKey() == pubkey) {
+        debugPrint('Already logged in with this pubkey');
+        return;
+      }
+      
+      // Logout first if logged in with different account
+      if (_ndk!.accounts.isLoggedIn) {
+        debugPrint('Logging out existing account: ${_ndk!.accounts.getPublicKey()}');
+        _ndk!.accounts.logout();
+      }
+      
       debugPrint('Logging in with pubkey: $pubkey');
       _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: hexPrivateKey);
       
@@ -131,6 +145,7 @@ class NdkService {
       }
     } catch (e) {
       debugPrint('Error during login: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
       rethrow;
     }
   }

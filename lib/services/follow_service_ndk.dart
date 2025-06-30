@@ -129,10 +129,13 @@ class FollowServiceNdk {
       // Check if user is logged in
       final loginCheckTime = DateTime.now();
       print('⏱️ [${loginCheckTime.toIso8601String()}] Checking login status...');
+      print('  NDK initialized: ${_ndkService.isInitialized}');
+      print('  NDK logged in: ${_ndkService.isLoggedIn}');
+      print('  NDK current pubkey: ${_ndkService.currentUserPubkey}');
       
       if (!_ndkService.isLoggedIn) {
         if (kDebugMode) {
-          print('⏱️ [${DateTime.now().toIso8601String()}] Cannot follow: User not logged in');
+          print('⏱️ [${DateTime.now().toIso8601String()}] Cannot follow: User not logged in to NDK');
         }
         return false;
       }
