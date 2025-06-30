@@ -65,12 +65,9 @@ class _LoginScreenState extends State<LoginScreen> {
       final ndkPubkey = _ndkService.currentUserPubkey;
       debugPrint('⏱️ [${DateTime.now().toIso8601String()}] NDK current user pubkey: $ndkPubkey');
       
-      // Load contact list from relays after login
-      final contactListStart = DateTime.now();
-      debugPrint('⏱️ [${contactListStart.toIso8601String()}] Loading contact list from relays...');
-      final followService = FollowServiceNdk();
-      await followService.loadContactListFromRelays();
-      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Contact list loaded (took ${DateTime.now().difference(contactListStart).inMilliseconds}ms)');
+      // Skip loading contact list during login to improve speed
+      // It will be loaded on-demand when needed
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Skipping contact list load for faster login');
       
       final totalLoginTime = DateTime.now().difference(loginStartTime);
       debugPrint('⏱️ [${DateTime.now().toIso8601String()}] ✅ Login process completed (total: ${totalLoginTime.inMilliseconds}ms)');

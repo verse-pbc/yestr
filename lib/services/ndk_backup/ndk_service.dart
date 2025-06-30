@@ -84,9 +84,8 @@ class NdkService {
     final privateKey = await _keyManagementService.getPrivateKey();
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
-        // Generate pubkey from private key if not available
-        final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
-        final pubkey = signer.getPublicKey();
+        // Generate pubkey from private key using NDK's Bip340
+        final pubkey = ndk.Bip340.getPublicKey(privateKey);
         
         debugPrint('Loading account with pubkey: $pubkey');
         _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
@@ -115,9 +114,8 @@ class NdkService {
         throw Exception('Failed to get hex private key');
       }
       
-      // Extract pubkey from private key using Bip340EventSigner
-      final signer = Bip340EventSigner(privateKey: hexPrivateKey, publicKey: '');
-      final pubkey = signer.getPublicKey();
+      // Extract pubkey from private key using NDK's Bip340
+      final pubkey = ndk.Bip340.getPublicKey(hexPrivateKey);
       
       debugPrint('Attempting to login with pubkey: $pubkey');
       
