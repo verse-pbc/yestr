@@ -11,6 +11,8 @@ class NostrProfile {
   final String? nip05;
   final String? lud16;
   final DateTime? createdAt;
+  final List<String>? relays; // General relays for content (from kind 10002)
+  final List<String>? dmRelays; // DM-specific relays (from kind 10050)
 
   NostrProfile({
     required this.pubkey,
@@ -23,6 +25,8 @@ class NostrProfile {
     this.nip05,
     this.lud16,
     this.createdAt,
+    this.relays,
+    this.dmRelays,
   });
 
   factory NostrProfile.fromNostrEvent(Map<String, dynamic> event) {
@@ -67,6 +71,8 @@ class NostrProfile {
         createdAt: event['created_at'] != null 
             ? DateTime.fromMillisecondsSinceEpoch((event['created_at'] as int) * 1000)
             : null,
+        relays: null, // Will be populated separately from relay events
+        dmRelays: null, // Will be populated separately from relay events
       );
     } catch (e) {
       print('Error parsing profile: $e');
@@ -75,4 +81,34 @@ class NostrProfile {
   }
 
   String get displayNameOrName => displayName ?? name ?? 'Unnamed';
+  
+  NostrProfile copyWith({
+    String? pubkey,
+    String? name,
+    String? displayName,
+    String? picture,
+    String? about,
+    String? banner,
+    String? website,
+    String? nip05,
+    String? lud16,
+    DateTime? createdAt,
+    List<String>? relays,
+    List<String>? dmRelays,
+  }) {
+    return NostrProfile(
+      pubkey: pubkey ?? this.pubkey,
+      name: name ?? this.name,
+      displayName: displayName ?? this.displayName,
+      picture: picture ?? this.picture,
+      about: about ?? this.about,
+      banner: banner ?? this.banner,
+      website: website ?? this.website,
+      nip05: nip05 ?? this.nip05,
+      lud16: lud16 ?? this.lud16,
+      createdAt: createdAt ?? this.createdAt,
+      relays: relays ?? this.relays,
+      dmRelays: dmRelays ?? this.dmRelays,
+    );
+  }
 }

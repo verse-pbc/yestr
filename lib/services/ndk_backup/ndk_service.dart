@@ -60,6 +60,12 @@ class NdkService {
         logLevel: kDebugMode ? Level.trace : Level.warning,
       );
       
+      debugPrint('🚀 NDK Configuration:');
+      debugPrint('  Engine: JIT (Outbox Model Enabled)');
+      debugPrint('  Event Verifier: Rust');
+      debugPrint('  Cache: ${kIsWeb ? "Memory" : "Isar"}');
+      debugPrint('  Bootstrap Relays: ${config.bootstrapRelays.length}');
+      
       // Initialize NDK
       _ndk = Ndk(config);
       

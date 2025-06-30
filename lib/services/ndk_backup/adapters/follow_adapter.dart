@@ -54,9 +54,15 @@ class FollowAdapter {
     try {
       final ndk = _ndkService.ndk;
       
+      print('📤 Following user with outbox model:');
+      print('  Target: $pubkey');
+      print('  Using NDK JIT engine to broadcast to user\'s write relays');
+      
       // Use NDK's built-in method to add a contact
+      // This will automatically use the outbox model to publish to the user's write relays
       await ndk.follows.broadcastAddContact(pubkey);
       
+      print('✅ Follow event broadcast using outbox model');
       return true;
     } catch (e) {
       print('Error following user: $e');

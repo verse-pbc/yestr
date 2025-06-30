@@ -43,6 +43,32 @@ class YestrRelayService {
                 if (content != null && pubkey != null) {
                   final metadata = jsonDecode(content) as Map<String, dynamic>;
                   
+                  // Extract relay information
+                  List<String>? relays;
+                  List<String>? dmRelays;
+                  
+                  // Get general relays from relay_list (kind 10002)
+                  final relayList = itemData['relay_list'] as Map<String, dynamic>?;
+                  if (relayList != null && relayList['tags'] != null) {
+                    relays = [];
+                    for (final tag in relayList['tags'] as List) {
+                      if (tag is List && tag.length >= 2 && tag[0] == 'r') {
+                        relays.add(tag[1] as String);
+                      }
+                    }
+                  }
+                  
+                  // Get DM relays from dm_relay_list (kind 10050)
+                  final dmRelayList = itemData['dm_relay_list'] as Map<String, dynamic>?;
+                  if (dmRelayList != null && dmRelayList['tags'] != null) {
+                    dmRelays = [];
+                    for (final tag in dmRelayList['tags'] as List) {
+                      if (tag is List && tag.length >= 2 && tag[0] == 'relay') {
+                        dmRelays.add(tag[1] as String);
+                      }
+                    }
+                  }
+                  
                   final profile = NostrProfile(
                     pubkey: pubkey,
                     name: metadata['name'] as String?,
@@ -56,10 +82,18 @@ class YestrRelayService {
                     createdAt: profileEvent['created_at'] != null 
                       ? DateTime.fromMillisecondsSinceEpoch((profileEvent['created_at'] as int) * 1000)
                       : null,
+                    relays: relays,
+                    dmRelays: dmRelays,
                   );
                   
                   profiles.add(profile);
                   print('YestrRelayService: Added profile ${pubkey.substring(0, 8)}... - ${profile.displayNameOrName}');
+                  if (relays != null && relays.isNotEmpty) {
+                    print('  - Relays: ${relays.join(", ")}');
+                  }
+                  if (dmRelays != null && dmRelays.isNotEmpty) {
+                    print('  - DM Relays: ${dmRelays.join(", ")}');
+                  }
                 }
               }
             } catch (e) {

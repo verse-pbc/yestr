@@ -174,7 +174,16 @@ class DirectMessageServiceNdk {
       final signer = Bip340EventSigner(privateKey: privateKey, publicKey: publicKey);
       await signer.sign(event);
 
+      print('[DM Service NDK] 📤 Broadcasting DM with outbox model:');
+      print('[DM Service NDK]   Recipient: ${recipient.pubkey}');
+      print('[DM Service NDK]   NDK will broadcast to:');
+      print('[DM Service NDK]     - Our write relays (outbox)');
+      print('[DM Service NDK]     - Recipient\'s read relays (inbox)');
+      
       // Publish using NDK
+      // NDK will automatically use outbox model:
+      // 1. Publish to our write relays (outbox)
+      // 2. Publish to recipient's read relays (inbox) because of p-tag
       final response = _ndkService.ndk.broadcast.broadcast(
         nostrEvent: event,
       );
@@ -183,7 +192,8 @@ class DirectMessageServiceNdk {
       final results = await response.broadcastDoneFuture;
       bool success = results.any((r) => r.broadcastSuccessful);
       
-      print('[DM Service NDK] ✓ Successfully published NIP-04 DM');
+      print('[DM Service NDK] ✅ Successfully published NIP-04 DM using outbox model');
+      print('[DM Service NDK]   Successful relays: ${results.where((r) => r.broadcastSuccessful).length}');
       
       // Create local message for immediate UI update
       final message = DirectMessage(

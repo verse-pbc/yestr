@@ -54,7 +54,19 @@ class ReactionServiceNdk {
         pubKey: ndk.accounts.getPublicKey() ?? '',
       );
 
+      if (kDebugMode) {
+        print('📤 Broadcasting reaction with outbox model:');
+        print('  Event: ${targetEvent.id}');
+        print('  Target author: ${targetEvent.pubkey}');
+        print('  NDK will broadcast to:');
+        print('    - Our write relays (outbox)');
+        print('    - Target\'s read relays (inbox)');
+      }
+      
       // Sign and broadcast the event
+      // NDK will automatically use outbox model:
+      // 1. Publish to our write relays (outbox)
+      // 2. Publish to the target's read relays (inbox) because of p-tag
       final broadcastResult = ndk.broadcast.broadcast(nostrEvent: reactionEvent);
       await broadcastResult.broadcastDoneFuture;
       
@@ -64,12 +76,13 @@ class ReactionServiceNdk {
         _userReactions[targetEvent.id] = '+';
         
         if (kDebugMode) {
-          print('ReactionService: Successfully published like for event ${targetEvent.id}');
+          print('✅ Successfully published like using outbox model');
+          print('  Successful relays: ${responses.where((r) => r.broadcastSuccessful).length}');
         }
         return true;
       } else {
         if (kDebugMode) {
-          print('ReactionService: Failed to publish like');
+          print('❌ Failed to publish like');
         }
         return false;
       }
