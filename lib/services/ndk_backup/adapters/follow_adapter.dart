@@ -66,13 +66,25 @@ class FollowAdapter {
       print('⏱️ [${initCheckTime.toIso8601String()}] Checking NDK initialization...');
       print('  NDK initialized: ${_ndkService.isInitialized}');
       print('  NDK logged in: ${_ndkService.isLoggedIn}');
-      print('  Current user pubkey: ${ndk.accounts.getPublicKey()}');
+      
+      final currentPubkey = ndk.accounts.getPublicKey();
+      print('  Current user pubkey: $currentPubkey');
+      
+      // Ensure we have a valid pubkey before proceeding
+      if (currentPubkey == null || currentPubkey.isEmpty) {
+        print('⏱️ [${DateTime.now().toIso8601String()}] ❌ Error: User not properly logged in to NDK (empty pubkey)');
+        return false;
+      }
       
       // Use NDK's built-in method to add a contact
       // This will automatically use the outbox model to publish to the user's write relays
       final broadcastStartTime = DateTime.now();
       print('⏱️ [${broadcastStartTime.toIso8601String()}] Starting NDK broadcastAddContact...');
+      print('  ⚠️ Note: NDK will fetch current contact list from relays (up to 10 sec timeout)');
+      print('  ⚠️ This ensures we don\'t overwrite contacts added by other clients');
       
+      // TODO: Consider implementing a local cache of the contact list to avoid relay fetches
+      // TODO: Or use a shorter timeout for contact list fetching in follow operations
       await ndk.follows.broadcastAddContact(pubkey);
       
       final broadcastEndTime = DateTime.now();

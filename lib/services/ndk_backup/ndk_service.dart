@@ -84,15 +84,21 @@ class NdkService {
     final privateKey = await _keyManagementService.getPrivateKey();
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
-        // Login with private key
-        final pubkey = await _keyManagementService.getPublicKey();
-        if (pubkey != null) {
-          _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
-        }
-        debugPrint('Account loaded successfully');
+        // Generate pubkey from private key if not available
+        final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
+        final pubkey = signer.getPublicKey();
+        
+        debugPrint('Loading account with pubkey: $pubkey');
+        _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
+        
+        // Verify login
+        final loggedInPubkey = _ndk!.accounts.getPublicKey();
+        debugPrint('Account loaded successfully. Logged in pubkey: $loggedInPubkey');
       } catch (e) {
         debugPrint('Error loading account: $e');
       }
+    } else {
+      debugPrint('No private key available to load account');
     }
   }
   
@@ -106,12 +112,16 @@ class NdkService {
       // Extract pubkey from private key using Bip340EventSigner
       final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
       final pubkey = signer.getPublicKey();
+      
+      debugPrint('Logging in with pubkey: $pubkey');
       _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
+      
+      // Verify login
+      final loggedInPubkey = _ndk!.accounts.getPublicKey();
+      debugPrint('Login successful. Verified pubkey: $loggedInPubkey');
       
       // Save to key management service
       await _keyManagementService.savePrivateKey(privateKey);
-      
-      debugPrint('Login successful');
     } catch (e) {
       debugPrint('Error during login: $e');
       rethrow;
