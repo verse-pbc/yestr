@@ -43,7 +43,7 @@ class ProfileAdapter {
   Future<NostrProfile?> fetchProfile(String pubkey) async {
     try {
       final ndk = _ndkService.ndk;
-      final metadata = await ndk.metadatas.loadMetadata(pubkey);
+      final metadata = await ndk.metadata.loadMetadata(pubkey);
       
       if (metadata == null) return null;
       
@@ -54,7 +54,7 @@ class ProfileAdapter {
         filters: [
           Filter(
             authors: [pubkey],
-            kinds: [Metadata.KIND],
+            kinds: [Metadata.kKind],
             limit: 1,
           ),
         ],
@@ -91,12 +91,11 @@ class ProfileAdapter {
       final profiles = <NostrProfile>[];
       
       // Use NDK's batch metadata loading
-      final metadataMap = await ndk.metadatas.loadMetadatas(pubkeys);
+      final metadataList = await ndk.metadata.loadMetadatas(pubkeys, null);
       
-      for (final entry in metadataMap.entries) {
-        final metadata = entry.value;
-        if (metadata != null) {
-          profiles.add(metadataToProfile(metadata, pubkey: entry.key));
+      for (int i = 0; i < pubkeys.length; i++) {
+        if (i < metadataList.length && metadataList[i] != null) {
+          profiles.add(metadataToProfile(metadataList[i], pubkey: pubkeys[i]));
         }
       }
       
@@ -113,7 +112,7 @@ class ProfileAdapter {
       final ndk = _ndkService.ndk;
       final metadata = profileToMetadata(profile);
       
-      await ndk.metadatas.broadcastMetadata(metadata);
+      await ndk.metadata.broadcastMetadata(metadata);
       return true;
     } catch (e) {
       print('Error updating profile: $e');

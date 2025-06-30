@@ -43,7 +43,7 @@ class NdkUsageExample {
     final stream = ndkAdapter.directMessages.subscribeToMessages();
     
     stream.listen((message) {
-      print('New message from ${message.pubkey}: ${message.content}');
+      print('New message from ${message.senderPubkey}: ${message.content}');
     });
   }
   
@@ -139,9 +139,17 @@ class NdkUsageExample {
     if (profile == null) return;
     
     // Update profile
-    final updatedProfile = profile.copyWith(
+    final updatedProfile = NostrProfile(
+      pubkey: profile.pubkey,
+      name: profile.name,
+      displayName: profile.displayName,
+      picture: profile.picture,
+      banner: profile.banner,
       about: 'Updated bio using NDK!',
       website: 'https://example.com',
+      nip05: profile.nip05,
+      lud16: profile.lud16,
+      createdAt: profile.createdAt,
     );
     
     final success = await ndkAdapter.profiles.updateProfile(updatedProfile);

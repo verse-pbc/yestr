@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 part 'cached_message.g.dart';
 
 /// Cached direct message stored in Isar database
-@collection
+@Collection(accessor: 'cachedMessages')
 class CachedMessage {
   Id id = Isar.autoIncrement;
   

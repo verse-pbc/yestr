@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:ndk/ndk.dart';
-import 'package:logger/logger.dart';
+import 'package:logger/logger.dart' as logger;
+import 'package:isar/isar.dart';
 import '../../../models/nostr_profile.dart';
+import '../../../models/database/cached_profile.dart';
 import '../ndk_service.dart';
 import '../../database/isar_database_service.dart';
 import 'profile_adapter.dart';
@@ -9,7 +11,7 @@ import 'profile_adapter.dart';
 /// Profile adapter with integrated caching for better performance
 class CachedProfileAdapter extends ProfileAdapter {
   final IsarDatabaseService _database;
-  final Logger _logger = Logger();
+  final logger.Logger _logger = logger.Logger();
   
   CachedProfileAdapter(NdkService ndkService, this._database) : super(ndkService);
   

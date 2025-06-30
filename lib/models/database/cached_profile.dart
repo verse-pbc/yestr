@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 part 'cached_profile.g.dart';
 
 /// Cached profile data stored in Isar database for offline access and performance
-@collection
+@Collection(accessor: 'cachedProfiles')
 class CachedProfile {
   Id id = Isar.autoIncrement;
   

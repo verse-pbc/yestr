@@ -15,7 +15,7 @@ extension GetCachedProfileCollection on Isar {
 
 const CachedProfileSchema = CollectionSchema(
   name: r'CachedProfile',
-  id: -3272954809300854847,
+  id: 1,
   properties: {
     r'about': PropertySchema(
       id: 0,
@@ -90,7 +90,7 @@ const CachedProfileSchema = CollectionSchema(
   idName: r'id',
   indexes: {
     r'pubkey': IndexSchema(
-      id: -5440107494565194882,
+      id: 2,
       name: r'pubkey',
       unique: true,
       replace: true,
@@ -103,7 +103,7 @@ const CachedProfileSchema = CollectionSchema(
       ],
     ),
     r'lastUpdated': IndexSchema(
-      id: 8989359681631629925,
+      id: 3,
       name: r'lastUpdated',
       unique: false,
       replace: false,

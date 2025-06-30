@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:card_swiper_demo/services/nostr_service.dart';
-import 'package:card_swiper_demo/services/ndk/ndk_adapter_service.dart';
-import 'package:card_swiper_demo/models/nostr_profile.dart';
+import 'package:yestr/services/nostr_service.dart';
+import 'package:yestr/services/ndk_backup/ndk_adapter_service.dart';
+import 'package:yestr/models/nostr_profile.dart';
 
 void main() {
   group('NDK Integration Tests', () {

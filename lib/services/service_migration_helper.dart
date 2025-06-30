@@ -2,6 +2,8 @@ import 'follow_service.dart';
 import 'follow_service_ndk.dart';
 import 'reaction_service.dart';
 import 'reaction_service_ndk.dart';
+import 'direct_message_service_v2.dart';
+import 'key_management_service.dart';
 import 'ndk_backup/ndk_service.dart';
 
 /// Helper class to manage the migration from old services to NDK-based services
@@ -45,6 +47,12 @@ class ServiceMigrationHelper {
       return ReactionServiceNdk();
     }
     return ReactionService();
+  }
+  
+  /// Get the appropriate DirectMessageService based on configuration
+  static DirectMessageService getDirectMessageService() {
+    // Always return v2 which internally uses NDK
+    return DirectMessageService(KeyManagementService.instance);
   }
   
   /// Migrate follow data from old service to NDK

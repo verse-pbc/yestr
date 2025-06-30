@@ -1,6 +1,8 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:card_swiper_demo/services/database/isar_database_service.dart';
 import 'package:card_swiper_demo/models/database/cached_message.dart';
+import 'package:card_swiper_demo/models/database/cached_profile.dart';
+import 'package:card_swiper_demo/models/database/cached_relay.dart';
 import 'package:card_swiper_demo/services/monitoring/performance_monitor.dart';
 import 'package:isar/isar.dart';
 import 'dart:io';
@@ -314,6 +316,7 @@ void main() {
           
           await testIsar.cachedMessages
               .where()
+              .filter()
               .conversationKeyEqualTo(conversationKey)
               .sortByCreatedAtDesc()
               .findAll();

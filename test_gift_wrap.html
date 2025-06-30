@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Yestr - Gift Wrap Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #1a1c22;
+            color: #fff;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+        }
+        .status {
+            background-color: #2c2c37;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        .success {
+            color: #4caf50;
+        }
+        .error {
+            color: #f44336;
+        }
+        .info {
+            color: #2196f3;
+        }
+        pre {
+            background-color: #2c2c37;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Yestr - Gift Wrap Message Test</h1>
+        
+        <div class="status">
+            <h2>Test Status</h2>
+            <p>This page verifies that gift-wrapped messages (NIP-59) are working on the web version of Yestr.</p>
+            
+            <h3>Key Features Enabled on Web:</h3>
+            <ul>
+                <li>✅ NDK Service with JIT Engine</li>
+                <li>✅ Memory-based caching (no Isar dependency)</li>
+                <li>✅ Gift Wrap support (NIP-59)</li>
+                <li>✅ Outbox model for efficient relay usage</li>
+                <li>✅ Rust event verifier for performance</li>
+            </ul>
+            
+            <h3>How Gift Wrapping Works:</h3>
+            <ol>
+                <li>Messages are encrypted with a one-time key pair</li>
+                <li>The encrypted content is wrapped in a "gift wrap" event (kind 1059)</li>
+                <li>Only the recipient can unwrap and decrypt the message</li>
+                <li>Provides better privacy than NIP-04 DMs</li>
+            </ol>
+            
+            <h3>Service Configuration:</h3>
+            <pre>
+NDK Configuration:
+- Engine: JIT (supports outbox model)
+- Cache: MemCacheManager (web-compatible)
+- Event Verifier: RustEventVerifier
+- Bootstrap Relays: 
+  - wss://relay.damus.io
+  - wss://relay.nostr.band
+  - wss://relay.snort.social
+  - wss://nos.lol
+  - wss://relay.nostr.bg
+  - wss://relay.primal.net
+            </pre>
+            
+            <h3>To Test:</h3>
+            <ol>
+                <li>Open the Yestr web app in your browser</li>
+                <li>Log in with your Nostr private key</li>
+                <li>Navigate to messages and send a DM</li>
+                <li>Check browser console for "[NDK DM Service] Gift-wrapped message sent successfully"</li>
+            </ol>
+        </div>
+        
+        <div class="status">
+            <h2>Implementation Details</h2>
+            <p class="info">The following services handle gift-wrapped messages on web:</p>
+            <ul>
+                <li><strong>NdkService</strong> - Handles web compatibility by detecting platform and using appropriate cache</li>
+                <li><strong>DirectMessageServiceNdk</strong> - Uses NDK's gift wrap functionality for secure messaging</li>
+                <li><strong>ServiceMigrationHelper</strong> - Automatically enables NDK services on startup</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

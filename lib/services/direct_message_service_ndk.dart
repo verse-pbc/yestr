@@ -137,30 +137,6 @@ class DirectMessageServiceNdk {
       // TODO: Update when gift wrap API is stable
       print('[DM Service NDK] Using NIP-04 encryption...');
       return await _sendLegacyDirectMessage(content, recipient);
-      
-      print('[DM Service NDK] ✓ Successfully published gift wrapped DM');
-      
-      // Create local message for immediate UI update
-      final message = DirectMessage(
-        id: event.id,
-        content: content,
-        senderPubkey: publicKey,
-        recipientPubkey: recipient.pubkey,
-        createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-        isFromMe: true,
-        isRead: true,
-      );
-      
-      // Update local state
-      if (!_messagesByPubkey.containsKey(recipient.pubkey)) {
-        _messagesByPubkey[recipient.pubkey] = [];
-      }
-      _messagesByPubkey[recipient.pubkey]!.add(message);
-      _messagesController.add(message);
-      await _updateConversation(recipient.pubkey, message);
-      await _saveMessagesToCache(recipient.pubkey);
-      
-      return true;
     } catch (e) {
       print('[DM Service NDK] ERROR in sendDirectMessage: $e');
       print('[DM Service NDK] Stack trace: ${StackTrace.current}');
@@ -199,17 +175,13 @@ class DirectMessageServiceNdk {
       await signer.sign(event);
 
       // Publish using NDK
-      final broadcastRequest = NdkRequest.broadcast(event);
-      final response = await _ndkService.ndk.requests.send(broadcastRequest);
+      final response = _ndkService.ndk.broadcast.broadcast(
+        nostrEvent: event,
+      );
       
       // Wait for broadcast to complete
-      bool success = false;
-      await for (final result in response.stream) {
-        if (result.broadcast != null) {
-          success = true;
-          break;
-        }
-      }
+      final results = await response.broadcastDoneFuture;
+      bool success = results.any((r) => r.broadcastSuccessful);
       
       print('[DM Service NDK] ✓ Successfully published NIP-04 DM');
       

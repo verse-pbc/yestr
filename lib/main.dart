@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'screens/login_screen.dart';
 import 'widgets/responsive_wrapper.dart';
 import 'services/nostr_band_api_service.dart';
 import 'services/service_migration_helper.dart';
+import 'services/service_migration_helper_web.dart';
 
 void main() async {
   // Ensure Flutter binding is initialized

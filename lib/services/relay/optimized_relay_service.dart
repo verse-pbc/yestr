@@ -1,6 +1,6 @@
 import 'dart:async';
 import 'package:ndk/ndk.dart';
-import 'package:logger/logger.dart';
+import 'package:logger/logger.dart' as app_logger;
 import '../database/isar_database_service.dart';
 import '../ndk_backup/ndk_service.dart';
 import '../../models/database/cached_relay.dart';
@@ -9,7 +9,7 @@ import '../../models/database/cached_relay.dart';
 class OptimizedRelayService {
   final NdkService _ndkService;
   final IsarDatabaseService _database;
-  final Logger _logger = Logger();
+  final app_logger.Logger _logger = app_logger.Logger();
   
   // Performance monitoring
   final Map<String, RelayMetrics> _relayMetrics = {};
@@ -139,14 +139,12 @@ class OptimizedRelayService {
       final ndk = _ndkService.ndk;
       
       for (final pubkey in pubkeys) {
-        // Get relay list metadata (kind 10002)
-        final relayList = await ndk.relayLists.loadRelayList(pubkey);
+        // Get user relay list (NIP-65)
+        // For now skip user relay list lookup - would need proper cache access
+        final userRelayList = null;
         
-        if (relayList != null && relayList.relays.isNotEmpty) {
-          result[pubkey] = relayList.relays
-              .where((r) => r.read || r.write)
-              .map((r) => r.url)
-              .toList();
+        if (userRelayList != null && userRelayList.relays.isNotEmpty) {
+          result[pubkey] = userRelayList.relays.keys.toList();
         }
       }
     } catch (e) {

@@ -35,7 +35,7 @@ void main() async {
     final testEvent = NostrEvent(
       id: 'test_event_id',
       pubkey: 'test_pubkey',
-      createdAt: DateTime.now(),
+      createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       kind: 1,
       tags: [],
       content: 'Test content',

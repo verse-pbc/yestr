@@ -30,9 +30,12 @@ class NdkService {
     if (_ndk != null) return;
     
     try {
-      // Initialize Isar database first
-      final database = IsarDatabaseService.instance;
-      await database.initialize();
+      // Initialize Isar database first (skip on web)
+      IsarDatabaseService? database;
+      if (!kIsWeb) {
+        database = IsarDatabaseService.instance;
+        await database.initialize();
+      }
       
       // Create NDK configuration with JIT engine and Rust verifier for performance
       final config = NdkConfig(
@@ -40,8 +43,10 @@ class NdkService {
         engine: NdkEngine.JIT,
         // Use Rust verifier for better performance on signature verification
         eventVerifier: RustEventVerifier(),
-        // Use our custom Isar cache manager
-        cache: NdkCacheManager(database),
+        // Use Isar cache on native, memory cache on web
+        cache: kIsWeb || database == null 
+            ? MemCacheManager() 
+            : NdkCacheManager(database),
         // Bootstrap relays for initial connection
         bootstrapRelays: [
           'wss://relay.damus.io',

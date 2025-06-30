@@ -27,7 +27,17 @@ class IsarDatabaseService {
     if (_isar != null) return;
     
     try {
-      final dir = await getApplicationDocumentsDirectory();
+      String? dirPath;
+      
+      // Handle web platform where path_provider might not be available
+      if (!kIsWeb) {
+        try {
+          final dir = await getApplicationDocumentsDirectory();
+          dirPath = dir.path;
+        } catch (e) {
+          _logger.w('Could not get app documents directory, using default: $e');
+        }
+      }
       
       _isar = await Isar.open(
         [
@@ -35,9 +45,9 @@ class IsarDatabaseService {
           CachedMessageSchema,
           CachedRelaySchema,
         ],
-        directory: dir.path,
+        directory: dirPath ?? (kIsWeb ? '' : '.'),
         name: 'yestr_cache',
-        inspector: kDebugMode, // Enable inspector in debug mode
+        inspector: kDebugMode,
       );
       
       _logger.i('Isar database initialized successfully');
@@ -73,7 +83,7 @@ class IsarDatabaseService {
         ..nip05 = profile.nip05
         ..lud16 = profile.lud16
         ..website = profile.website
-        ..createdAt = profile.createdAt
+        ..createdAt = profile.createdAt ?? DateTime.now()
         ..lastUpdated = DateTime.now();
       
       await isar.cachedProfiles.put(cached);
@@ -93,7 +103,7 @@ class IsarDatabaseService {
         ..nip05 = profile.nip05
         ..lud16 = profile.lud16
         ..website = profile.website
-        ..createdAt = profile.createdAt
+        ..createdAt = profile.createdAt ?? DateTime.now()
         ..lastUpdated = DateTime.now()
       ).toList();
       
@@ -214,7 +224,7 @@ class IsarDatabaseService {
     final conversationKey = CachedMessage.generateConversationKey(pubkey1, pubkey2);
     
     return await isar.cachedMessages
-        .where()
+        .filter()
         .conversationKeyEqualTo(conversationKey)
         .sortByCreatedAtDesc()
         .offset(offset)
@@ -226,11 +236,11 @@ class IsarDatabaseService {
   Future<void> markMessagesAsRead(String senderPubkey, String receiverPubkey) async {
     await isar.writeTxn(() async {
       final messages = await isar.cachedMessages
-          .where()
+          .filter()
           .senderPubkeyEqualTo(senderPubkey)
-          .filter()
+          .and()
           .receiverPubkeyEqualTo(receiverPubkey)
-          .filter()
+          .and()
           .isReadEqualTo(false)
           .findAll();
       
@@ -317,7 +327,7 @@ class IsarDatabaseService {
   /// Get healthy relays sorted by reliability
   Future<List<CachedRelay>> getHealthyRelays({int limit = 10}) async {
     final relays = await isar.cachedRelays
-        .where()
+        .filter()
         .statusEqualTo(RelayStatus.connected)
         .findAll();
     

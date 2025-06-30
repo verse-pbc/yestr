@@ -15,7 +15,7 @@ extension GetCachedMessageCollection on Isar {
 
 const CachedMessageSchema = CollectionSchema(
   name: r'CachedMessage',
-  id: -2278078621598369788,
+  id: 4,
   properties: {
     r'conversationKey': PropertySchema(
       id: 0,
@@ -95,7 +95,7 @@ const CachedMessageSchema = CollectionSchema(
   idName: r'id',
   indexes: {
     r'eventId': IndexSchema(
-      id: -2707901133518603130,
+      id: 5,
       name: r'eventId',
       unique: true,
       replace: true,
@@ -108,7 +108,7 @@ const CachedMessageSchema = CollectionSchema(
       ],
     ),
     r'senderPubkey': IndexSchema(
-      id: 4343246414814789008,
+      id: 6,
       name: r'senderPubkey',
       unique: false,
       replace: false,
@@ -121,7 +121,7 @@ const CachedMessageSchema = CollectionSchema(
       ],
     ),
     r'receiverPubkey': IndexSchema(
-      id: -764351341891284959,
+      id: 7,
       name: r'receiverPubkey',
       unique: false,
       replace: false,
@@ -134,7 +134,7 @@ const CachedMessageSchema = CollectionSchema(
       ],
     ),
     r'createdAt': IndexSchema(
-      id: -3433535483987302584,
+      id: 8,
       name: r'createdAt',
       unique: false,
       replace: false,
@@ -147,7 +147,7 @@ const CachedMessageSchema = CollectionSchema(
       ],
     ),
     r'conversationKey_receiverPubkey': IndexSchema(
-      id: -1945327074561209433,
+      id: 9,
       name: r'conversationKey_receiverPubkey',
       unique: false,
       replace: false,

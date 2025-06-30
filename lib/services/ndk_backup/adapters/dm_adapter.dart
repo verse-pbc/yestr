@@ -27,19 +27,25 @@ class DmAdapter {
         ],
       );
       
-      await ndk.giftWrap.wrapAndBroadcast(
+      // Wrap the rumor
+      final giftWrappedEvent = await ndk.giftWrap.toGiftWrap(
         rumor: rumor,
-        receiverPubkeys: [recipientPubkey],
+        recipientPubkey: recipientPubkey,
+      );
+      
+      // Broadcast the wrapped event
+      await ndk.broadcast.broadcast(
+        nostrEvent: giftWrappedEvent,
       );
       
       // Create DirectMessage from the sent rumor
       return DirectMessage(
         id: rumor.id ?? '',
-        pubkey: ndk.accounts.currentAccount!.pubkey,
+        senderPubkey: ndk.accounts.getPublicKey() ?? '',
+        isFromMe: true,
         recipientPubkey: recipientPubkey,
         content: content,
         createdAt: DateTime.now(),
-        tags: rumor.tags,
       );
     } catch (e) {
       print('Error sending direct message: $e');
@@ -53,7 +59,7 @@ class DmAdapter {
     
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
+      final currentPubkey = ndk.accounts.getPublicKey();
       
       if (currentPubkey == null) {
         controller.addError('No logged in user');
@@ -61,31 +67,44 @@ class DmAdapter {
       }
       
       // Subscribe to gift wrapped messages
-      final subscription = ndk.giftWrap.subscribeToIncomingEvents(
-        kinds: [14], // NIP-17 DM kind
-      ).listen((giftWrap) {
+      final filter = Filter(
+        kinds: [1059], // Gift wrap kind
+        pTags: [currentPubkey], // Messages for current user
+      );
+      
+      final response = ndk.requests.subscription(
+        filters: [filter],
+        name: 'incoming-gift-wraps',
+      );
+      
+      final subscription = response.stream.listen((event) async {
         try {
           // Extract sender pubkey from tags
           String? senderPubkey;
-          for (final tag in giftWrap.tags) {
+          for (final tag in event.tags) {
             if (tag.length >= 2 && tag[0] == 'p' && tag[1] != currentPubkey) {
               senderPubkey = tag[1];
               break;
             }
           }
           
+          // Unwrap the gift wrap to get the actual message
+          final unwrapped = await ndk.giftWrap.fromGiftWrap(
+            giftWrap: event,
+          );
+          
           if (senderPubkey == null) {
-            // If no other pubkey in tags, sender is the gift wrap author
-            senderPubkey = giftWrap.author;
+            // Use the pubkey from the unwrapped event
+            senderPubkey = unwrapped.pubKey;
           }
           
           final message = DirectMessage(
-            id: giftWrap.id ?? '',
-            pubkey: senderPubkey,
+            id: unwrapped.id ?? '',
+            senderPubkey: senderPubkey,
             recipientPubkey: currentPubkey,
-            content: giftWrap.content,
-            createdAt: DateTime.fromMillisecondsSinceEpoch(giftWrap.createdAt * 1000),
-            tags: giftWrap.tags,
+            content: unwrapped.content,
+            createdAt: DateTime.fromMillisecondsSinceEpoch(unwrapped.createdAt * 1000),
+            isFromMe: senderPubkey == currentPubkey,
           );
           
           controller.add(message);
@@ -114,17 +133,25 @@ class DmAdapter {
   }) async {
     try {
       final ndk = _ndkService.ndk;
-      final currentPubkey = ndk.accounts.currentAccount?.pubkey;
+      final currentPubkey = ndk.accounts.getPublicKey();
       
       if (currentPubkey == null) return [];
       
       final messages = <DirectMessage>[];
       
       // Fetch gift wrapped messages
-      final events = await ndk.giftWrap.fetchIncomingEvents(
-        kinds: [14], // NIP-17 DM kind
+      final filter = Filter(
+        kinds: [1059], // Gift wrap kind
+        pTags: [currentPubkey, otherPubkey], // Messages involving both users
         limit: limit,
       );
+      
+      final response = await ndk.requests.query(
+        filters: [filter],
+        name: 'fetch-gift-wraps',
+      );
+      
+      final events = await response.stream.toList();
       
       for (final event in events) {
         try {
@@ -143,20 +170,25 @@ class DmAdapter {
             }
           }
           
+          // Unwrap the gift wrap to get the actual message
+          final unwrapped = await ndk.giftWrap.fromGiftWrap(
+            giftWrap: event,
+          );
+          
           // Also check if the author is the other pubkey
-          if (event.author == otherPubkey) {
+          if (unwrapped.pubKey == otherPubkey) {
             involvesOtherPubkey = true;
             senderPubkey = otherPubkey;
           }
           
           if (involvesOtherPubkey) {
             final message = DirectMessage(
-              id: event.id ?? '',
-              pubkey: senderPubkey ?? event.author,
+              id: unwrapped.id ?? '',
+              senderPubkey: senderPubkey ?? unwrapped.pubKey,
+              isFromMe: (senderPubkey ?? unwrapped.pubKey) == currentPubkey,
               recipientPubkey: currentPubkey,
-              content: event.content,
-              createdAt: DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000),
-              tags: event.tags,
+              content: unwrapped.content,
+              createdAt: DateTime.fromMillisecondsSinceEpoch(unwrapped.createdAt * 1000),
             );
             messages.add(message);
           }

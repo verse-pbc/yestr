@@ -15,7 +15,7 @@ extension GetCachedRelayCollection on Isar {
 
 const CachedRelaySchema = CollectionSchema(
   name: r'CachedRelay',
-  id: 4891386104027015686,
+  id: 10,
   properties: {
     r'averageResponseTime': PropertySchema(
       id: 0,
@@ -116,7 +116,7 @@ const CachedRelaySchema = CollectionSchema(
   idName: r'id',
   indexes: {
     r'url': IndexSchema(
-      id: -5756857009679432345,
+      id: 11,
       name: r'url',
       unique: true,
       replace: true,
@@ -129,7 +129,7 @@ const CachedRelaySchema = CollectionSchema(
       ],
     ),
     r'lastConnected': IndexSchema(
-      id: -1292300933012341865,
+      id: 12,
       name: r'lastConnected',
       unique: false,
       replace: false,

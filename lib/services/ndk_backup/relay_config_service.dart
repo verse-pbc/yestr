@@ -1,4 +1,5 @@
 import 'package:ndk/ndk.dart';
+import 'package:ndk/entities.dart';
 import 'ndk_service.dart';
 
 /// Service to manage relay configuration for NDK
@@ -41,7 +42,7 @@ class RelayConfigService {
   RelayConfigService(this._ndkService);
   
   /// Get connected relays
-  List<Relay> getConnectedRelays() {
+  List<RelayConnectivity> getConnectedRelays() {
     try {
       final ndk = _ndkService.ndk;
       return ndk.relays.connectedRelays;
@@ -55,7 +56,10 @@ class RelayConfigService {
   Future<bool> addRelay(String url) async {
     try {
       final ndk = _ndkService.ndk;
-      await ndk.relays.addRelay(url);
+      await ndk.relays.connectRelay(
+        dirtyUrl: url,
+        connectionSource: ConnectionSource.explicit,
+      );
       return true;
     } catch (e) {
       print('Error adding relay: $e');
@@ -67,7 +71,7 @@ class RelayConfigService {
   Future<bool> removeRelay(String url) async {
     try {
       final ndk = _ndkService.ndk;
-      await ndk.relays.removeRelay(url);
+      await ndk.relays.disconnectRelay(url);
       return true;
     } catch (e) {
       print('Error removing relay: $e');
@@ -76,13 +80,13 @@ class RelayConfigService {
   }
   
   /// Get relay information (NIP-11)
-  Future<RelayInfo?> getRelayInfo(String url) async {
+  Future<Map<String, dynamic>?> getRelayInfo(String url) async {
     try {
       final ndk = _ndkService.ndk;
-      final relay = ndk.relays.getRelay(url);
-      if (relay == null) return null;
+      final relayConnectivity = ndk.relays.connectedRelays
+          .firstWhere((r) => r.url == url, orElse: () => throw Exception('Relay not found'));
       
-      return await relay.getRelayInformation();
+      return await relayConnectivity.relay.getRelayInformation();
     } catch (e) {
       print('Error getting relay info: $e');
       return null;
@@ -90,21 +94,41 @@ class RelayConfigService {
   }
   
   /// Create a relay set for specific use case
-  RelaySet createRelaySet(String purpose) {
+  RelaySet createRelaySet(String purpose, String ownerPubKey) {
     final relayUrls = specializedRelays[purpose] ?? defaultRelays;
-    return RelaySet.fromRelayUrls(relayUrls);
+    
+    // Create relay mappings
+    final relayMap = <String, List<PubkeyMapping>>{};
+    for (final url in relayUrls) {
+      relayMap[url] = [
+        PubkeyMapping(
+          pubKey: ownerPubKey,
+          rwMarker: ReadWriteMarker.readWrite,
+        ),
+      ];
+    }
+    
+    return RelaySet(
+      name: purpose,
+      pubKey: ownerPubKey,
+      relayMinCountPerPubkey: 2,
+      direction: RelayDirection.outbox,
+      relaysMap: relayMap,
+    );
   }
   
   /// Get relay statistics
-  Map<String, RelayStats> getRelayStats() {
+  Map<String, Map<String, dynamic>> getRelayStats() {
     try {
       final ndk = _ndkService.ndk;
-      final stats = <String, RelayStats>{};
+      final stats = <String, Map<String, dynamic>>{};
       
-      for (final relay in ndk.relays.relays) {
-        if (relay.stats != null) {
-          stats[relay.url] = relay.stats!;
-        }
+      for (final relay in ndk.relays.connectedRelays) {
+        stats[relay.url] = {
+          'connected': relay.relayTransport?.isOpen() ?? false,
+          'url': relay.url,
+          'connectionSource': relay.relay.connectionSource.toString(),
+        };
       }
       
       return stats;
@@ -128,7 +152,7 @@ class RelayConfigService {
       
       // Let NDK's JIT engine handle optimization
       // This will disconnect unused relays and connect to better ones
-      await ndk.relays.reconnectRelays();
+      await ndk.relays.reconnectRelays(ndk.relays.connectedRelays.map((r) => r.url));
     } catch (e) {
       print('Error optimizing relays: $e');
     }
@@ -138,7 +162,9 @@ class RelayConfigService {
   Future<UserRelayList?> getUserRelayList(String pubkey) async {
     try {
       final ndk = _ndkService.ndk;
-      return await ndk.userRelayLists.getCached(pubkey);
+      // Load from cache first
+      // For now return null - would need to implement proper cache access
+      return null;
     } catch (e) {
       print('Error getting user relay list: $e');
       return null;
@@ -153,33 +179,33 @@ class RelayConfigService {
     try {
       final ndk = _ndkService.ndk;
       
-      // Create relay list items
-      final items = <RelayListItem>[];
+      // Create relay map
+      final relayMap = <String, ReadWriteMarker>{};
       
       // Add read relays
       for (final url in readRelays) {
-        items.add(RelayListItem(
-          url: url,
-          marker: ReadWriteMarker.read,
-        ));
+        relayMap[url] = ReadWriteMarker.readOnly;
       }
       
       // Add write relays
       for (final url in writeRelays) {
-        items.add(RelayListItem(
-          url: url,
-          marker: ReadWriteMarker.write,
-        ));
+        // If relay is both read and write, use readWrite marker
+        if (relayMap.containsKey(url)) {
+          relayMap[url] = ReadWriteMarker.readWrite;
+        } else {
+          relayMap[url] = ReadWriteMarker.writeOnly;
+        }
       }
       
-      // Broadcast the relay list
-      await ndk.userRelayLists.broadcastUserRelayList(
-        UserRelayList(
-          relays: items,
-          pubkey: ndk.accounts.currentAccount!.pubkey,
-          createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
-        ),
+      // Create and broadcast the relay list
+      final userRelayList = UserRelayList(
+        relays: relayMap,
+        pubKey: ndk.accounts.getPublicKey()!,
+        createdAt: DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        refreshedTimestamp: DateTime.now().millisecondsSinceEpoch ~/ 1000,
       );
+      
+      await ndk.userRelayLists.setInitialUserRelayList(userRelayList);
       
       return true;
     } catch (e) {
@@ -189,10 +215,10 @@ class RelayConfigService {
   }
   
   /// Monitor relay connectivity
-  Stream<RelayConnectivity> monitorConnectivity() {
+  Stream<Map<String, RelayConnectivity>> monitorConnectivity() {
     try {
       final ndk = _ndkService.ndk;
-      return ndk.relays.connectivityStream;
+      return ndk.relays.relayConnectivityChanges;
     } catch (e) {
       print('Error monitoring connectivity: $e');
       return const Stream.empty();

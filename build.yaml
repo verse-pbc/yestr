@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      isar_generator|isar_generator:
+        options:
+          # Enable this to fix JavaScript integer literal issues
+          use_incremental_collection_id: true
+          # Use web-safe integer IDs
+          web_compat: true

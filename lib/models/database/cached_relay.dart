@@ -3,7 +3,7 @@ import 'package:isar/isar.dart';
 part 'cached_relay.g.dart';
 
 /// Cached relay information for optimized connection management
-@collection
+@Collection(accessor: 'cachedRelays')
 class CachedRelay {
   Id id = Isar.autoIncrement;
   

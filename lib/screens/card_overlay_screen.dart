@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import 'package:bech32/bech32.dart';
@@ -10,9 +11,11 @@ import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/nostr_band_api_service.dart';
 import '../services/service_migration_helper.dart';
+import '../services/service_migration_helper_web.dart';
 import '../services/saved_profiles_service.dart';
 import '../services/web_background_service.dart';
 import '../widgets/profile_card.dart';
+import 'card_overlay_screen_web_init.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
 import '../widgets/gradient_background.dart';
@@ -28,7 +31,7 @@ class CardOverlayScreen extends StatefulWidget {
   State<CardOverlayScreen> createState() => _CardOverlayScreenState();
 }
 
-class _CardOverlayScreenState extends State<CardOverlayScreen> {
+class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitializer {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
   final NostrBandApiService _nostrBandApiService = NostrBandApiService();
@@ -44,10 +47,16 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> {
   @override
   void initState() {
     super.initState();
+    
+    
     // Initialize services
-    _followService = ServiceMigrationHelper.getFollowService();
+    _followService = kIsWeb 
+        ? ServiceMigrationHelperWeb.getFollowService() 
+        : ServiceMigrationHelper.getFollowService();
     _savedProfilesService = SavedProfilesService(_nostrService);
-    _dmService = DirectMessageService(_keyService);
+    _dmService = kIsWeb 
+        ? ServiceMigrationHelperWeb.getDirectMessageService()
+        : ServiceMigrationHelper.getDirectMessageService();
     _notificationService = DmNotificationService(_dmService, _keyService);
     
     // Set main background when screen loads

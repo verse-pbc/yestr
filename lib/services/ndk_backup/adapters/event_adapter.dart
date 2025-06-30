@@ -13,7 +13,7 @@ class EventAdapter {
   NostrEvent ndkEventToNostrEvent(Nip01Event ndkEvent) {
     return NostrEvent(
       id: ndkEvent.id ?? '',
-      pubkey: ndkEvent.pubkey,
+      pubkey: ndkEvent.pubKey,
       createdAt: ndkEvent.createdAt,
       kind: ndkEvent.kind,
       tags: ndkEvent.tags,
@@ -25,13 +25,12 @@ class EventAdapter {
   /// Convert our NostrEvent model to NDK Nip01Event
   Nip01Event nostrEventToNdkEvent(NostrEvent event) {
     return Nip01Event(
-      id: event.id,
-      pubkey: event.pubkey,
+      pubKey: event.pubkey,
       createdAt: event.createdAt,
       kind: event.kind,
       tags: event.tags,
       content: event.content,
-      sig: event.sig,
+      // Note: NDK events don't have id or sig fields - they're computed internally
     );
   }
   
@@ -45,16 +44,16 @@ class EventAdapter {
     try {
       final ndk = _ndkService.ndk;
       
-      // Create relay set if specific relay is requested
-      RelaySet? relaySet;
+      // Use explicit relays if specific relay is requested
+      List<String>? explicitRelays;
       if (relayUrl != null) {
-        relaySet = RelaySet.fromRelayUrls([relayUrl]);
+        explicitRelays = [relayUrl];
       }
       
       // Query events
       final response = ndk.requests.query(
         filters: filters,
-        relaySet: relaySet,
+        explicitRelays: explicitRelays,
       );
       
       // Convert and forward events
@@ -90,16 +89,16 @@ class EventAdapter {
     try {
       final ndk = _ndkService.ndk;
       
-      // Create relay set if specific relay is requested
-      RelaySet? relaySet;
+      // Use explicit relays if specific relay is requested
+      List<String>? explicitRelays;
       if (relayUrl != null) {
-        relaySet = RelaySet.fromRelayUrls([relayUrl]);
+        explicitRelays = [relayUrl];
       }
       
       // Subscribe to events
       final response = ndk.requests.subscription(
         filters: filters,
-        relaySet: relaySet,
+        explicitRelays: explicitRelays,
       );
       
       // Convert and forward events
@@ -116,7 +115,7 @@ class EventAdapter {
       
       controller.onCancel = () {
         subscription.cancel();
-        response.close();
+        // NDK response doesn't have a close method - subscription cancel is sufficient
       };
     } catch (e) {
       controller.addError('Error subscribing to events: $e');
@@ -131,12 +130,13 @@ class EventAdapter {
       final ndk = _ndkService.ndk;
       final ndkEvent = nostrEventToNdkEvent(event);
       
-      final response = await ndk.broadcasts.broadcast(
+      final response = ndk.broadcast.broadcast(
         nostrEvent: ndkEvent,
       );
       
-      // Check if broadcast was successful
-      return response.publishDone;
+      // Wait for broadcast to complete
+      await response.broadcastDoneFuture;
+      return true;
     } catch (e) {
       print('Error publishing event: $e');
       return false;
@@ -147,13 +147,13 @@ class EventAdapter {
   Future<NostrEvent?> publishTextNote(String content, {List<List<String>>? tags}) async {
     try {
       final ndk = _ndkService.ndk;
-      final account = ndk.accounts.currentAccount;
+      final account = ndk.accounts.getLoggedAccount();
       
       if (account == null) return null;
       
       // Create event
       final event = Nip01Event(
-        pubkey: account.pubkey,
+        pubKey: account.pubkey,
         kind: 1, // Text note
         content: content,
         tags: tags ?? [],
@@ -164,13 +164,12 @@ class EventAdapter {
       await account.signer.sign(event);
       
       // Broadcast
-      final response = await ndk.broadcasts.broadcast(
+      final response = ndk.broadcast.broadcast(
         nostrEvent: event,
       );
       
-      if (response.publishDone) {
-        return ndkEventToNostrEvent(event);
-      }
+      await response.broadcastDoneFuture;
+      return ndkEventToNostrEvent(event);
       
       return null;
     } catch (e) {
@@ -183,13 +182,13 @@ class EventAdapter {
   Future<bool> deleteEvents(List<String> eventIds) async {
     try {
       final ndk = _ndkService.ndk;
-      final account = ndk.accounts.currentAccount;
+      final account = ndk.accounts.getLoggedAccount();
       
       if (account == null) return false;
       
       // Create deletion event (NIP-09)
       final deletionEvent = Nip01Event(
-        pubkey: account.pubkey,
+        pubKey: account.pubkey,
         kind: 5, // Deletion
         content: 'Deleted',
         tags: eventIds.map((id) => ['e', id]).toList(),
@@ -200,11 +199,12 @@ class EventAdapter {
       await account.signer.sign(deletionEvent);
       
       // Broadcast
-      final response = await ndk.broadcasts.broadcast(
+      final response = ndk.broadcast.broadcast(
         nostrEvent: deletionEvent,
       );
       
-      return response.publishDone;
+      await response.broadcastDoneFuture;
+      return true;
     } catch (e) {
       print('Error deleting events: $e');
       return false;
@@ -219,13 +219,13 @@ class EventAdapter {
   }) async {
     try {
       final ndk = _ndkService.ndk;
-      final account = ndk.accounts.currentAccount;
+      final account = ndk.accounts.getLoggedAccount();
       
       if (account == null) return false;
       
       // Create reaction event (NIP-25)
       final reactionEvent = Nip01Event(
-        pubkey: account.pubkey,
+        pubKey: account.pubkey,
         kind: 7, // Reaction
         content: reaction,
         tags: [
@@ -239,11 +239,12 @@ class EventAdapter {
       await account.signer.sign(reactionEvent);
       
       // Broadcast
-      final response = await ndk.broadcasts.broadcast(
+      final response = ndk.broadcast.broadcast(
         nostrEvent: reactionEvent,
       );
       
-      return response.publishDone;
+      await response.broadcastDoneFuture;
+      return true;
     } catch (e) {
       print('Error reacting to event: $e');
       return false;
