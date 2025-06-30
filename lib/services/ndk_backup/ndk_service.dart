@@ -73,6 +73,11 @@ class NdkService {
       await _loadAccount();
       
       debugPrint('NDK initialized successfully with JIT engine and Isar cache');
+      
+      // Add listener to track relay connections
+      _ndk!.relays.relayStateStream.listen((relayState) {
+        debugPrint('🔌 Relay state change: ${relayState.url} - Connected: ${relayState.connected}');
+      });
     } catch (e) {
       debugPrint('Error initializing NDK: $e');
       rethrow;

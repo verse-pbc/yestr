@@ -51,21 +51,42 @@ class FollowAdapter {
   
   /// Follow a user
   Future<bool> followUser(String pubkey) async {
+    final startTime = DateTime.now();
+    print('⏱️ [${startTime.toIso8601String()}] FollowAdapter.followUser started');
+    
     try {
       final ndk = _ndkService.ndk;
       
-      print('📤 Following user with outbox model:');
+      print('⏱️ [${DateTime.now().toIso8601String()}] 📤 Following user with outbox model:');
       print('  Target: $pubkey');
       print('  Using NDK JIT engine to broadcast to user\'s write relays');
       
+      // Check if NDK is properly initialized
+      final initCheckTime = DateTime.now();
+      print('⏱️ [${initCheckTime.toIso8601String()}] Checking NDK initialization...');
+      print('  NDK initialized: ${_ndkService.isInitialized}');
+      print('  NDK logged in: ${_ndkService.isLoggedIn}');
+      print('  Current user pubkey: ${ndk.accounts.getPublicKey()}');
+      
       // Use NDK's built-in method to add a contact
       // This will automatically use the outbox model to publish to the user's write relays
+      final broadcastStartTime = DateTime.now();
+      print('⏱️ [${broadcastStartTime.toIso8601String()}] Starting NDK broadcastAddContact...');
+      
       await ndk.follows.broadcastAddContact(pubkey);
       
-      print('✅ Follow event broadcast using outbox model');
+      final broadcastEndTime = DateTime.now();
+      final broadcastDuration = broadcastEndTime.difference(broadcastStartTime);
+      print('⏱️ [${broadcastEndTime.toIso8601String()}] ✅ NDK broadcastAddContact completed (took ${broadcastDuration.inMilliseconds}ms)');
+      
+      final totalDuration = DateTime.now().difference(startTime);
+      print('⏱️ [${DateTime.now().toIso8601String()}] ✅ Follow event broadcast using outbox model (total: ${totalDuration.inMilliseconds}ms)');
       return true;
     } catch (e) {
-      print('Error following user: $e');
+      final errorTime = DateTime.now();
+      final totalDuration = errorTime.difference(startTime);
+      print('⏱️ [${errorTime.toIso8601String()}] ❌ Error following user: $e (total: ${totalDuration.inMilliseconds}ms)');
+      print('  Stack trace: ${StackTrace.current}');
       return false;
     }
   }

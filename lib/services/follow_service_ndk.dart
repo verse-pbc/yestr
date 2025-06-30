@@ -122,42 +122,64 @@ class FollowServiceNdk {
 
   /// Follow a profile using NDK
   Future<bool> followProfile(String pubkey) async {
+    final startTime = DateTime.now();
+    print('⏱️ [${startTime.toIso8601String()}] FollowServiceNdk.followProfile started for $pubkey');
+    
     try {
       // Check if user is logged in
+      final loginCheckTime = DateTime.now();
+      print('⏱️ [${loginCheckTime.toIso8601String()}] Checking login status...');
+      
       if (!_ndkService.isLoggedIn) {
         if (kDebugMode) {
-          print('Cannot follow: User not logged in');
+          print('⏱️ [${DateTime.now().toIso8601String()}] Cannot follow: User not logged in');
         }
         return false;
       }
+      
+      print('⏱️ [${DateTime.now().toIso8601String()}] User is logged in');
 
       // Optimistically update local cache
+      final optimisticUpdateTime = DateTime.now();
+      print('⏱️ [${optimisticUpdateTime.toIso8601String()}] Optimistically updating local cache...');
       _followedProfiles.add(pubkey);
       await _saveFollowedProfiles();
+      print('⏱️ [${DateTime.now().toIso8601String()}] Local cache updated (took ${DateTime.now().difference(optimisticUpdateTime).inMilliseconds}ms)');
 
       // Use NDK to follow the user
+      final ndkCallTime = DateTime.now();
+      print('⏱️ [${ndkCallTime.toIso8601String()}] Calling NDK followUser adapter...');
       final success = await _followAdapter.followUser(pubkey);
+      final ndkCallDuration = DateTime.now().difference(ndkCallTime);
+      print('⏱️ [${DateTime.now().toIso8601String()}] NDK followUser completed: $success (took ${ndkCallDuration.inMilliseconds}ms)');
       
       if (!success) {
         // Revert on failure
+        final revertTime = DateTime.now();
+        print('⏱️ [${revertTime.toIso8601String()}] Reverting optimistic update...');
         _followedProfiles.remove(pubkey);
         await _saveFollowedProfiles();
+        print('⏱️ [${DateTime.now().toIso8601String()}] Reverted (took ${DateTime.now().difference(revertTime).inMilliseconds}ms)');
       }
       
+      final totalDuration = DateTime.now().difference(startTime);
       if (kDebugMode) {
         print(success 
-          ? 'Successfully followed: $pubkey' 
-          : 'Failed to follow: $pubkey');
+          ? '⏱️ [${DateTime.now().toIso8601String()}] ✅ Successfully followed: $pubkey (total: ${totalDuration.inMilliseconds}ms)' 
+          : '⏱️ [${DateTime.now().toIso8601String()}] ❌ Failed to follow: $pubkey (total: ${totalDuration.inMilliseconds}ms)');
       }
       
       return success;
     } catch (e) {
       // Revert on error
+      final errorTime = DateTime.now();
+      print('⏱️ [${errorTime.toIso8601String()}] Error occurred, reverting...');
       _followedProfiles.remove(pubkey);
       await _saveFollowedProfiles();
       
+      final totalDuration = DateTime.now().difference(startTime);
       if (kDebugMode) {
-        print('Error following profile: $e');
+        print('⏱️ [${DateTime.now().toIso8601String()}] ❌ Error following profile: $e (total: ${totalDuration.inMilliseconds}ms)');
       }
       return false;
     }
