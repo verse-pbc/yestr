@@ -8,6 +8,7 @@ import '../screens/login_screen.dart';
 import '../screens/saved_profiles_screen.dart';
 import '../screens/card_overlay_screen.dart';
 import '../screens/messages/messages_screen.dart';
+import '../screens/trending_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -62,6 +63,7 @@ class _AppDrawerState extends State<AppDrawer> {
     // Check which screen we're on by checking the widget tree
     bool isOnSavedScreen = false;
     bool isOnMessagesScreen = false;
+    bool isOnTrendingScreen = false;
     context.visitAncestorElements((element) {
       final typeName = element.widget.runtimeType.toString();
       if (typeName == 'SavedProfilesScreen') {
@@ -70,11 +72,14 @@ class _AppDrawerState extends State<AppDrawer> {
       } else if (typeName == 'MessagesScreen') {
         isOnMessagesScreen = true;
         return false;
+      } else if (typeName == 'TrendingScreen') {
+        isOnTrendingScreen = true;
+        return false;
       }
       return true;
     });
     
-    final isOnDiscoverScreen = !isOnSavedScreen && !isOnMessagesScreen;
+    final isOnDiscoverScreen = !isOnSavedScreen && !isOnMessagesScreen && !isOnTrendingScreen;
 
     return Drawer(
       backgroundColor: const Color(0xFF1a1c22),
@@ -114,6 +119,23 @@ class _AppDrawerState extends State<AppDrawer> {
                     }
                   },
                   isSelected: isOnDiscoverScreen,
+                ),
+                _buildDrawerItem(
+                  context,
+                  icon: Icons.whatshot,
+                  title: 'Trending 🔥',
+                  onTap: () {
+                    Navigator.pop(context); // Close drawer
+                    if (!isOnTrendingScreen) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const TrendingScreen(),
+                        ),
+                      );
+                    }
+                  },
+                  isSelected: isOnTrendingScreen,
                 ),
                 _buildDrawerItem(
                   context,

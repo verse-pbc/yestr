@@ -493,6 +493,13 @@ class NostrService {
     // Legacy implementation
     try {
       print('NostrService: Getting notes for user $pubkey (legacy)');
+      print('NostrService: Connected channels: ${_channels.length}');
+      
+      // Ensure we're connected
+      if (_channels.isEmpty) {
+        print('NostrService: No channels connected, attempting to connect...');
+        await connect();
+      }
       final subscriptionId = 'notes_${DateTime.now().millisecondsSinceEpoch}';
       final request = [
         "REQ",

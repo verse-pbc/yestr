@@ -10,6 +10,7 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/nostr_band_api_service.dart';
+import '../services/yestr_relay_service.dart';
 import '../services/service_migration_helper.dart';
 import '../services/service_migration_helper_web.dart';
 import '../services/saved_profiles_service.dart';
@@ -35,6 +36,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
   final NostrBandApiService _nostrBandApiService = NostrBandApiService();
+  final YestrRelayService _yestrRelayService = YestrRelayService();
   late final dynamic _followService;
   final KeyManagementService _keyService = KeyManagementService();
   late final SavedProfilesService _savedProfilesService;
@@ -202,12 +204,10 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
       
       bool apiSuccess = false;
       
-      // Try to use Nostr Band API for trending profiles
+      // Try to use Yestr Relay for random profiles
       try {
-        // Force a fresh fetch to ensure we get the latest trending profiles
-        print('CardOverlayScreen: Clearing cache and fetching fresh trending profiles...');
-        _nostrBandApiService.clearCache();
-        final profiles = await _nostrBandApiService.fetchTrendingProfiles();
+        print('CardOverlayScreen: Fetching random profiles from Yestr relay...');
+        final profiles = await _yestrRelayService.getRandomProfiles(count: 50);
         
         if (profiles.isNotEmpty && mounted) {
           setState(() {
@@ -222,15 +222,15 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
           });
           apiSuccess = true;
           
-          print('\n=== PROFILES LOADED IN APP ===');
+          print('\n=== RANDOM PROFILES LOADED IN APP ===');
           print('Total profiles in app: ${_profiles.length}');
-          for (int i = 0; i < _profiles.length; i++) {
+          for (int i = 0; i < _profiles.length && i < 10; i++) {
             print('${i + 1}. ${_profiles[i].pubkey} - ${_profiles[i].displayNameOrName}');
           }
-          print('==============================\n');
+          print('=====================================\n');
         }
       } catch (apiError) {
-        print('CardOverlayScreen: Nostr Band API fetch failed: $apiError');
+        print('CardOverlayScreen: Yestr relay fetch failed: $apiError');
         print('CardOverlayScreen: Falling back to Nostr relay profiles');
       }
       

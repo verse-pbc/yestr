@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'screens/login_screen.dart';
 import 'widgets/responsive_wrapper.dart';
 import 'services/nostr_band_api_service.dart';
+import 'services/yestr_relay_service.dart';
 import 'services/service_migration_helper.dart';
 import 'services/service_migration_helper_web.dart';
 
@@ -20,8 +21,8 @@ void main() async {
     ServiceMigrationHelper.disableNdkServices();
   }
   
-  // Start prefetching trending profiles immediately when the app launches
-  NostrBandApiService().prefetchProfiles();
+  // Start prefetching random profiles from Yestr relay immediately when the app launches
+  YestrRelayService().prefetchRandomProfiles();
   
   runApp(const MyApp());
 }
