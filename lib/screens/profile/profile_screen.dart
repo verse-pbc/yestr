@@ -356,34 +356,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
               );
             },
           ),
-          // Profile Info at the bottom
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Card(
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Profile Information',
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildInfoRow('Public Key', _truncatePubkey(widget.profile.pubkey)),
-                      const SizedBox(height: 8),
-                      if (widget.profile.createdAt != null)
-                        _buildInfoRow(
-                          'Profile Created',
-                          _formatDate(widget.profile.createdAt!),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -524,31 +496,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  Widget _buildInfoRow(String label, String value) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          width: 120,
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Expanded(
-          child: Text(
-            value,
-            style: const TextStyle(fontFamily: 'monospace'),
-          ),
-        ),
-      ],
-    );
-  }
-
-  String _truncatePubkey(String pubkey) {
-    if (pubkey.length <= 16) return pubkey;
-    return '${pubkey.substring(0, 8)}...${pubkey.substring(pubkey.length - 8)}';
-  }
 
   String _formatDate(DateTime date) {
     final now = DateTime.now();
