@@ -513,8 +513,13 @@ class NostrService {
         if (eventData['kind'] == 1 && eventData['pubkey'] == pubkey) {
           try {
             final event = NostrEvent.fromJson(eventData);
-            notes.add(event);
-            print('NostrService: Received note ${notes.length}/${limit} from ${pubkey.substring(0, 8)}...');
+            // Check if we already have this note (by ID) to avoid duplicates from multiple relays
+            if (!notes.any((note) => note.id == event.id)) {
+              notes.add(event);
+              print('NostrService: Received note ${notes.length}/${limit} from ${pubkey.substring(0, 8)}...');
+            } else {
+              print('NostrService: Skipping duplicate note ${event.id.substring(0, 8)}...');
+            }
           } catch (e) {
             print('NostrService: Error parsing note event: $e');
           }
