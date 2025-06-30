@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_card_swiper/flutter_card_swiper.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 import 'dart:async';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
@@ -195,35 +196,85 @@ class _TrendingScreenState extends State<TrendingScreen> {
     return GradientBackground(
       child: Scaffold(
         backgroundColor: Colors.transparent,
-        appBar: AppBar(
-          title: const Text('Trending 🔥'),
-          backgroundColor: Colors.transparent,
-          elevation: 0,
-          centerTitle: true,
-        ),
+        drawerScrimColor: Colors.black.withOpacity(0.6),
         drawer: const AppDrawer(),
-        body: _isLoading
-            ? const Center(child: CircularProgressIndicator())
-            : _profiles.isEmpty
-                ? const Center(
-                    child: Text(
-                      'No trending profiles available',
-                      style: TextStyle(fontSize: 16),
+        body: Stack(
+          children: [
+            // App bar layer (bottom layer - lowest z-index)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                decoration: BoxDecoration(
+                  color: const Color(0xFF1a1c22), // Dark background for app bar
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.2),
+                      spreadRadius: 2,
+                      blurRadius: 8,
+                      offset: const Offset(0, 4),
                     ),
-                  )
-                : SafeArea(
-                    child: Column(
-                      children: [
-                        Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.all(20.0),
-                            child: CardSwiper(
+                  ],
+                ),
+                child: SafeArea(
+                  bottom: false,
+                  child: SizedBox(
+                    height: kToolbarHeight + 8,
+                    child: AppBar(
+                      elevation: 0,
+                      backgroundColor: Colors.transparent,
+                      leading: Builder(
+                        builder: (context) => Padding(
+                          padding: const EdgeInsets.only(top: 8.0),
+                          child: IconButton(
+                            icon: const Icon(Icons.menu, color: Colors.white, size: 30),
+                            onPressed: () => Scaffold.of(context).openDrawer(),
+                          ),
+                        ),
+                      ),
+                      title: Padding(
+                        padding: const EdgeInsets.only(top: 8.0),
+                        child: SvgPicture.asset(
+                          'assets/images/yestr_logo.svg',
+                          height: 40,
+                        ),
+                      ),
+                      centerTitle: true,
+                      toolbarHeight: kToolbarHeight + 8,
+                      titleSpacing: 0,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Cards layer (top layer - highest z-index) - takes full screen
+            SafeArea(
+              top: false, // Allow cards to extend under the app bar
+              child: _isLoading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _profiles.isEmpty
+                      ? const Center(
+                          child: Text(
+                            'No trending profiles available',
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        )
+                      : Column(
+                          children: [
+                            Expanded(
+                              child: CardSwiper(
                               controller: controller,
                               cardsCount: _profiles.length,
                               onSwipe: _handleSwipeAction,
-                              numberOfCardsDisplayed: 2,
-                              backCardOffset: const Offset(0, -40),
-                              padding: const EdgeInsets.all(0),
+                              numberOfCardsDisplayed: _profiles.length >= 3 ? 3 : _profiles.length,
+                              backCardOffset: const Offset(40, 40),
+                              padding: const EdgeInsets.only(
+                                left: 24.0,
+                                right: 24.0,
+                                top: kToolbarHeight + 32.0, // Add space for app bar plus some padding
+                                bottom: 24.0,
+                              ),
                               cardBuilder: (
                                 context,
                                 index,
@@ -311,7 +362,6 @@ class _TrendingScreenState extends State<TrendingScreen> {
                               },
                             ),
                           ),
-                        ),
                         // Action buttons
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
@@ -343,7 +393,9 @@ class _TrendingScreenState extends State<TrendingScreen> {
                         ),
                       ],
                     ),
-                  ),
+              ),
+          ],
+        ),
       ),
     );
   }
