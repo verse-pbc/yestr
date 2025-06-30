@@ -109,19 +109,26 @@ class NdkService {
     }
     
     try {
+      // Get the hex private key (handles nsec conversion in KeyManagementService)
+      final hexPrivateKey = await _keyManagementService.getPrivateKey();
+      if (hexPrivateKey == null || hexPrivateKey.isEmpty) {
+        throw Exception('Failed to get hex private key');
+      }
+      
       // Extract pubkey from private key using Bip340EventSigner
-      final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
+      final signer = Bip340EventSigner(privateKey: hexPrivateKey, publicKey: '');
       final pubkey = signer.getPublicKey();
       
       debugPrint('Logging in with pubkey: $pubkey');
-      _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
+      _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: hexPrivateKey);
       
       // Verify login
       final loggedInPubkey = _ndk!.accounts.getPublicKey();
       debugPrint('Login successful. Verified pubkey: $loggedInPubkey');
       
-      // Save to key management service
-      await _keyManagementService.savePrivateKey(privateKey);
+      if (loggedInPubkey != pubkey) {
+        throw Exception('NDK login verification failed: pubkey mismatch');
+      }
     } catch (e) {
       debugPrint('Error during login: $e');
       rethrow;

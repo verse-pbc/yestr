@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
+import '../services/ndk_backup/ndk_service.dart';
+import '../services/follow_service_ndk.dart';
 import '../services/web_background_service.dart';
 import '../widgets/gradient_background.dart';
 import 'card_overlay_screen.dart';
@@ -15,6 +17,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _privateKeyController = TextEditingController();
   final KeyManagementService _keyService = KeyManagementService();
+  final NdkService _ndkService = NdkService.instance;
   bool _isProcessing = false;
   bool _isObscured = true;
 
@@ -46,6 +49,17 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       // Store the private key
       await _keyService.storePrivateKey(privateKey);
+      
+      // Also login to NDK with the private key
+      debugPrint('Logging into NDK...');
+      await _ndkService.login(privateKey);
+      debugPrint('NDK login successful');
+      
+      // Load contact list from relays after login
+      debugPrint('Loading contact list from relays...');
+      final followService = FollowServiceNdk();
+      await followService.loadContactListFromRelays();
+      debugPrint('Contact list loaded');
       
       // Navigate to main screen
       if (mounted) {
