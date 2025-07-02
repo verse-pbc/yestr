@@ -1,0 +1,31 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "yestr (Chrome - HTML)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--web-renderer",
+        "html"
+      ]
+    },
+    {
+      "name": "yestr (Chrome - CanvasKit)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart",
+      "args": [
+        "--web-renderer",
+        "canvaskit"
+      ]
+    },
+    {
+      "name": "yestr (Chrome - Auto)",
+      "request": "launch",
+      "type": "dart",
+      "program": "lib/main.dart"
+    }
+  ]
+}

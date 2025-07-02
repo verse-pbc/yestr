@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import '../utils/cors_helper.dart';
 
 class ImageLightbox extends StatefulWidget {
   final String imageUrl;
@@ -86,14 +85,8 @@ class _ImageLightboxState extends State<ImageLightbox> with SingleTickerProvider
       maxScale: 4.0,
       child: Center(
         child: CachedNetworkImage(
-          imageUrl: CorsHelper.wrapWithCorsProxy(widget.imageUrl),
+          imageUrl: widget.imageUrl,
           fit: BoxFit.contain,
-          httpHeaders: const {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.9',
-            'Referer': 'https://yestr.app/',
-          },
           placeholder: (context, url) => const Center(
             child: CircularProgressIndicator(),
           ),

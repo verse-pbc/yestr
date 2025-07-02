@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
 import '../services/web_background_service.dart';
+import '../services/service_migration_helper.dart';
+import '../services/ndk_backup/ndk_service.dart';
 import '../widgets/gradient_background.dart';
 import 'card_overlay_screen.dart';
 
@@ -46,6 +48,17 @@ class _LoginScreenState extends State<LoginScreen> {
     try {
       // Store the private key
       await _keyService.storePrivateKey(privateKey);
+      
+      // Also login to NDK if it's enabled
+      if (ServiceMigrationHelper.isUsingNdk) {
+        try {
+          await NdkService.instance.login(privateKey);
+          print('NDK login successful after storing private key');
+        } catch (ndkError) {
+          print('Warning: NDK login failed: $ndkError');
+          // Continue anyway - the key is stored and will be loaded on next app start
+        }
+      }
       
       // Navigate to main screen
       if (mounted) {

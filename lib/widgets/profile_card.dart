@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/nostr_profile.dart';
 import '../screens/profile/profile_screen.dart';
-import '../utils/cors_helper.dart';
 
 class ProfileCard extends StatelessWidget {
   final NostrProfile profile;
@@ -49,24 +48,9 @@ class ProfileCard extends StatelessWidget {
               child: profile.picture != null
                   ? Builder(
                       builder: (context) {
-                        final imageUrl = CorsHelper.wrapWithCorsProxy(profile.picture!);
-                        if (profile.displayNameOrName.toLowerCase().contains('airport') ||
-                            profile.displayNameOrName.toLowerCase().contains('observatory') ||
-                            profile.displayNameOrName.toLowerCase().contains('sebastian')) {
-                          print('Debug: Loading image for ${profile.displayNameOrName}');
-                          print('Original URL: ${profile.picture}');
-                          print('Processed URL: $imageUrl');
-                        }
-                        
                         return CachedNetworkImage(
-                          imageUrl: imageUrl,
+                          imageUrl: profile.picture!,
                           fit: BoxFit.cover,
-                          httpHeaders: const {
-                            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                            'Accept': 'image/webp,image/apng,image/*,*/*;q=0.8',
-                            'Accept-Language': 'en-US,en;q=0.9',
-                            'Referer': 'https://yestr.app/',
-                          },
                           placeholder: (context, url) => Container(
                             color: Colors.grey[300],
                             child: const Center(
@@ -74,13 +58,6 @@ class ProfileCard extends StatelessWidget {
                             ),
                           ),
                           errorWidget: (context, url, error) {
-                            if (profile.displayNameOrName.toLowerCase().contains('airport') ||
-                                profile.displayNameOrName.toLowerCase().contains('observatory') ||
-                                profile.displayNameOrName.toLowerCase().contains('sebastian')) {
-                              print('ProfileCard image error for ${profile.displayNameOrName}: $error');
-                              print('Failed URL: $url');
-                              print('Error type: ${error.runtimeType}');
-                            }
                             return Container(
                               color: Colors.grey[300],
                               child: const Icon(

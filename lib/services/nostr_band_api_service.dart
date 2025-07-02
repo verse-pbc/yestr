@@ -39,19 +39,10 @@ class NostrBandApiService {
     try {
       final apiUrl = '$_baseUrl/trending/profiles';
       
-      // Use a self-hosted CORS proxy or consider these alternatives:
-      // 1. Deploy a simple Cloudflare Worker as a CORS proxy
-      // 2. Use Vercel/Netlify functions
-      // 3. Set up a simple Express server with cors middleware
-      
-      // For immediate testing, try thingproxy
-      final proxyUrl = 'https://thingproxy.freeboard.io/fetch/$apiUrl';
-      
       print('NostrBandApiService: Fetching trending profiles from: $apiUrl');
-      print('NostrBandApiService: Using proxy: $proxyUrl');
       
       final response = await http.get(
-        Uri.parse(proxyUrl),
+        Uri.parse(apiUrl),
         headers: {
           'Accept': 'application/json',
           'Content-Type': 'application/json',
