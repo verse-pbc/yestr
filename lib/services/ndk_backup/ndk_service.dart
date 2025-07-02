@@ -84,9 +84,8 @@ class NdkService {
     final privateKey = await _keyManagementService.getPrivateKey();
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
-        // Generate pubkey from private key if not available
-        final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
-        final pubkey = signer.getPublicKey();
+        // Generate pubkey from private key using NDK's Bip340
+        final pubkey = ndk.Bip340.getPublicKey(privateKey);
         
         debugPrint('Loading account with pubkey: $pubkey');
         _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
@@ -109,21 +108,42 @@ class NdkService {
     }
     
     try {
-      // Extract pubkey from private key using Bip340EventSigner
-      final signer = Bip340EventSigner(privateKey: privateKey, publicKey: '');
-      final pubkey = signer.getPublicKey();
+      // Get the hex private key (handles nsec conversion in KeyManagementService)
+      final hexPrivateKey = await _keyManagementService.getPrivateKey();
+      if (hexPrivateKey == null || hexPrivateKey.isEmpty) {
+        throw Exception('Failed to get hex private key');
+      }
+      
+      // Extract pubkey from private key using NDK's Bip340
+      final pubkey = ndk.Bip340.getPublicKey(hexPrivateKey);
+      
+      debugPrint('Attempting to login with pubkey: $pubkey');
+      
+      // Check if already logged in with this pubkey
+      if (_ndk!.accounts.isLoggedIn && _ndk!.accounts.getPublicKey() == pubkey) {
+        debugPrint('Already logged in with this pubkey');
+        return;
+      }
+      
+      // Logout first if logged in with different account
+      if (_ndk!.accounts.isLoggedIn) {
+        debugPrint('Logging out existing account: ${_ndk!.accounts.getPublicKey()}');
+        _ndk!.accounts.logout();
+      }
       
       debugPrint('Logging in with pubkey: $pubkey');
-      _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
+      _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: hexPrivateKey);
       
       // Verify login
       final loggedInPubkey = _ndk!.accounts.getPublicKey();
       debugPrint('Login successful. Verified pubkey: $loggedInPubkey');
       
-      // Save to key management service
-      await _keyManagementService.savePrivateKey(privateKey);
+      if (loggedInPubkey != pubkey) {
+        throw Exception('NDK login verification failed: pubkey mismatch');
+      }
     } catch (e) {
       debugPrint('Error during login: $e');
+      debugPrint('Stack trace: ${StackTrace.current}');
       rethrow;
     }
   }

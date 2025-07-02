@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
+import '../services/ndk_backup/ndk_service.dart';
+import '../services/follow_service_ndk.dart';
 import '../services/web_background_service.dart';
 import '../services/service_migration_helper.dart';
 import '../services/ndk_backup/ndk_service.dart';
@@ -17,6 +19,7 @@ class LoginScreen extends StatefulWidget {
 class _LoginScreenState extends State<LoginScreen> {
   final TextEditingController _privateKeyController = TextEditingController();
   final KeyManagementService _keyService = KeyManagementService();
+  final NdkService _ndkService = NdkService.instance;
   bool _isProcessing = false;
   bool _isObscured = true;
 
@@ -46,8 +49,30 @@ class _LoginScreenState extends State<LoginScreen> {
     });
 
     try {
+      final loginStartTime = DateTime.now();
+      debugPrint('⏱️ [${loginStartTime.toIso8601String()}] Starting login process...');
+      
       // Store the private key
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Storing private key...');
       await _keyService.storePrivateKey(privateKey);
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Private key stored (took ${DateTime.now().difference(loginStartTime).inMilliseconds}ms)');
+      
+      // Also login to NDK with the private key
+      final ndkLoginStart = DateTime.now();
+      debugPrint('⏱️ [${ndkLoginStart.toIso8601String()}] Logging into NDK...');
+      await _ndkService.login(privateKey);
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] NDK login successful (took ${DateTime.now().difference(ndkLoginStart).inMilliseconds}ms)');
+      
+      // Verify NDK login
+      final ndkPubkey = _ndkService.currentUserPubkey;
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] NDK current user pubkey: $ndkPubkey');
+      
+      // Skip loading contact list during login to improve speed
+      // It will be loaded on-demand when needed
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Skipping contact list load for faster login');
+      
+      final totalLoginTime = DateTime.now().difference(loginStartTime);
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] ✅ Login process completed (total: ${totalLoginTime.inMilliseconds}ms)');
       
       // Also login to NDK if it's enabled
       if (ServiceMigrationHelper.isUsingNdk) {
@@ -69,6 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
         );
       }
     } catch (e) {
+      debugPrint('⏱️ [${DateTime.now().toIso8601String()}] ❌ Login error: $e');
       _showError('Invalid private key: ${e.toString()}');
     } finally {
       if (mounted) {
