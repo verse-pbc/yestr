@@ -105,9 +105,11 @@ class _TrendingScreenState extends State<TrendingScreen> {
 
   Future<void> _handleMatch(String pubkey) async {
     try {
-      final success = await _followService.followProfile(pubkey);
+      // Call non-blocking follow method
+      final success = await _followService.followProfileNonBlocking(pubkey);
       
       if (success && mounted) {
+        // Show success immediately
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Followed! 🎉'),
@@ -116,6 +118,8 @@ class _TrendingScreenState extends State<TrendingScreen> {
           ),
         );
       }
+      // Note: No error snackbar here since user might not be logged in
+      // and we don't want to interrupt the swiping flow
     } catch (e) {
       print('Error following profile: $e');
     }

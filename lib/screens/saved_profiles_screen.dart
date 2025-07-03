@@ -480,14 +480,25 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
 
   Future<void> _handleFollow(NostrProfile profile) async {
     try {
-      final success = await _followService.followProfile(profile.pubkey);
+      // Call non-blocking follow method
+      final success = await _followService.followProfileNonBlocking(profile.pubkey);
       
       if (success && mounted) {
+        // Show success immediately
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Following ${profile.displayNameOrName}'),
+            content: Text('Following ${profile.displayNameOrName} 🎉'),
             duration: const Duration(seconds: 2),
             backgroundColor: Colors.green,
+          ),
+        );
+      } else if (!success && mounted) {
+        // Show failure only if initial check failed (not logged in)
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please login to follow users'),
+            duration: Duration(seconds: 2),
+            backgroundColor: Colors.red,
           ),
         );
       }
@@ -496,7 +507,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Failed to follow profile'),
+            content: Text('Error following user'),
             duration: Duration(seconds: 2),
             backgroundColor: Colors.red,
           ),

@@ -938,19 +938,23 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
 
   Future<void> _handleFollow(NostrProfile profile) async {
     try {
-      final success = await _followService.followProfile(profile.pubkey);
+      // Call non-blocking follow method
+      final success = await _followService.followProfileNonBlocking(profile.pubkey);
       
       if (success && mounted) {
+        // Show success immediately
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Following ${profile.displayNameOrName}'),
+            content: Text('Following ${profile.displayNameOrName} 🎉'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
         );
       } else if (!success && mounted) {
+        // Show failure only if initial check failed (not logged in)
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Follow failed. Please login to follow users.'),
+            content: Text('Please login to follow users'),
             backgroundColor: Colors.orange,
           ),
         );

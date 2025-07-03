@@ -123,30 +123,43 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
         createdAt: DateTime.now(),
       );
       
-      // Use NDK to publish profile update
+      // Update local state immediately for optimistic UI
+      setState(() {
+        _currentProfile = updatedProfile;
+      });
+      
+      // Try NDK first with a timeout, fall back to legacy if it fails
+      bool success = false;
+      
       if (ServiceMigrationHelper.isUsingNdk && _ndkService.isInitialized) {
-        final profileAdapter = ProfileAdapter(_ndkService);
-        final success = await profileAdapter.publishProfile(updatedProfile);
-        
-        if (success) {
-          if (mounted) {
-            _showSuccess('Profile updated successfully!');
-            // Update current profile
-            setState(() {
-              _currentProfile = updatedProfile;
-            });
-          }
-        } else {
-          throw Exception('Failed to publish profile update');
-        }
-      } else {
-        // Fallback to legacy service
-        await _nostrService.publishProfile(updatedProfile);
-        if (mounted) {
-          _showSuccess('Profile updated successfully!');
-          setState(() {
-            _currentProfile = updatedProfile;
+        try {
+          // Try NDK with a 5-second timeout
+          final profileAdapter = ProfileAdapter(_ndkService);
+          success = await profileAdapter.publishProfile(updatedProfile)
+              .timeout(const Duration(seconds: 5), onTimeout: () {
+            print('NDK profile update timed out, falling back to legacy');
+            return false;
           });
+        } catch (e) {
+          print('NDK profile update failed: $e');
+          success = false;
+        }
+      }
+      
+      // If NDK failed or timed out, use legacy service
+      if (!success) {
+        print('Using legacy NostrService for profile update');
+        success = await _nostrService.publishProfile(updatedProfile);
+      }
+      
+      if (mounted) {
+        if (success) {
+          _showSuccess('Profile updated successfully!');
+        } else {
+          // Still show success since we updated locally
+          _showSuccess('Profile updated! Publishing to relays...');
+          // Publish in background without blocking
+          _publishInBackground(updatedProfile);
         }
       }
     } catch (e) {
@@ -160,6 +173,36 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
           _isSaving = false;
         });
       }
+    }
+  }
+  
+  // Publish profile update in background
+  Future<void> _publishInBackground(NostrProfile profile) async {
+    try {
+      // Keep trying to publish in background
+      bool published = false;
+      int attempts = 0;
+      
+      while (!published && attempts < 3) {
+        attempts++;
+        print('Background profile publish attempt $attempts');
+        
+        // Try legacy service which is more reliable
+        published = await _nostrService.publishProfile(profile);
+        
+        if (!published) {
+          // Wait before retrying
+          await Future.delayed(Duration(seconds: 2 * attempts));
+        }
+      }
+      
+      if (published) {
+        print('✅ Profile successfully published in background');
+      } else {
+        print('❌ Failed to publish profile after $attempts attempts');
+      }
+    } catch (e) {
+      print('Error in background profile publish: $e');
     }
   }
   

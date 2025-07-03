@@ -120,7 +120,63 @@ class FollowServiceNdk {
     }
   }
 
-  /// Follow a profile using NDK
+  /// Follow a profile using NDK (non-blocking version)
+  /// Returns immediately with optimistic update, processes in background
+  Future<bool> followProfileNonBlocking(String pubkey) async {
+    try {
+      // Quick login check
+      if (!_ndkService.isLoggedIn) {
+        if (kDebugMode) {
+          print('Cannot follow: User not logged in to NDK');
+        }
+        return false;
+      }
+      
+      // Optimistically update local cache immediately
+      _followedProfiles.add(pubkey);
+      await _saveFollowedProfiles();
+      
+      // Process the actual follow in the background without awaiting
+      _processFollowInBackground(pubkey);
+      
+      // Return success immediately for optimistic UI update
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in followProfileNonBlocking: $e');
+      }
+      return false;
+    }
+  }
+  
+  /// Process follow action in background
+  Future<void> _processFollowInBackground(String pubkey) async {
+    try {
+      print('🔄 Processing follow in background for $pubkey');
+      
+      // Use NDK to follow the user (this might take time)
+      final success = await _followAdapter.followUser(pubkey);
+      
+      if (!success) {
+        // Revert on failure
+        print('❌ Background follow failed, reverting for $pubkey');
+        _followedProfiles.remove(pubkey);
+        await _saveFollowedProfiles();
+        
+        // Notify UI about the failure if needed
+        // You could emit an event here to show an error snackbar
+      } else {
+        print('✅ Background follow succeeded for $pubkey');
+      }
+    } catch (e) {
+      print('❌ Error in background follow: $e');
+      // Revert on error
+      _followedProfiles.remove(pubkey);
+      await _saveFollowedProfiles();
+    }
+  }
+
+  /// Follow a profile using NDK (blocking version - kept for compatibility)
   Future<bool> followProfile(String pubkey) async {
     final startTime = DateTime.now();
     print('⏱️ [${startTime.toIso8601String()}] FollowServiceNdk.followProfile started for $pubkey');

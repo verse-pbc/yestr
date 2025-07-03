@@ -112,7 +112,13 @@ class ProfileAdapter {
       final ndk = _ndkService.ndk;
       final metadata = profileToMetadata(profile);
       
-      await ndk.metadata.broadcastMetadata(metadata);
+      // Add timeout to prevent hanging
+      await ndk.metadata.broadcastMetadata(metadata)
+          .timeout(const Duration(seconds: 10), onTimeout: () {
+        print('NDK broadcastMetadata timed out');
+        throw Exception('Profile broadcast timed out');
+      });
+      
       return true;
     } catch (e) {
       print('Error updating profile: $e');
@@ -123,6 +129,27 @@ class ProfileAdapter {
   /// Publish profile update (alias for updateProfile for consistency)
   Future<bool> publishProfile(NostrProfile profile) async {
     return updateProfile(profile);
+  }
+  
+  /// Publish profile update without blocking (returns immediately)
+  Future<bool> publishProfileNonBlocking(NostrProfile profile) async {
+    try {
+      final ndk = _ndkService.ndk;
+      final metadata = profileToMetadata(profile);
+      
+      // Fire and forget - don't await the broadcast
+      ndk.metadata.broadcastMetadata(metadata).then((_) {
+        print('✅ Profile broadcast completed in background');
+      }).catchError((error) {
+        print('❌ Profile broadcast error in background: $error');
+      });
+      
+      // Return success immediately for optimistic UI
+      return true;
+    } catch (e) {
+      print('Error initiating profile broadcast: $e');
+      return false;
+    }
   }
   
 }

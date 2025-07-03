@@ -65,7 +65,54 @@ class FollowService {
     }
   }
 
-  /// Follow a profile
+  /// Follow a profile (non-blocking version)
+  /// Returns immediately with optimistic update, processes in background
+  Future<bool> followProfileNonBlocking(String pubkey) async {
+    try {
+      // Quick login check
+      final hasKey = await _keyService.hasPrivateKey();
+      if (!hasKey) {
+        if (kDebugMode) {
+          print('Cannot follow: User not logged in');
+        }
+        return false;
+      }
+
+      // Optimistically update local cache immediately
+      _followedProfiles.add(pubkey);
+      await _saveFollowedProfiles();
+      
+      // Process the actual follow in the background without awaiting
+      _processFollowInBackground(pubkey);
+      
+      // Return success immediately for optimistic UI update
+      return true;
+    } catch (e) {
+      if (kDebugMode) {
+        print('Error in followProfileNonBlocking: $e');
+      }
+      return false;
+    }
+  }
+  
+  /// Process follow action in background
+  Future<void> _processFollowInBackground(String pubkey) async {
+    try {
+      print('🔄 Processing follow in background for $pubkey');
+      
+      // Publish contact list (this might take time)
+      await _publishContactList();
+      
+      print('✅ Background follow succeeded for $pubkey');
+    } catch (e) {
+      print('❌ Error in background follow: $e');
+      // Revert on error
+      _followedProfiles.remove(pubkey);
+      await _saveFollowedProfiles();
+    }
+  }
+
+  /// Follow a profile (blocking version - kept for compatibility)
   Future<bool> followProfile(String pubkey) async {
     try {
       // Check if user is logged in

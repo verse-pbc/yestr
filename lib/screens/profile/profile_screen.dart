@@ -668,52 +668,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleFollow() async {
-    final startTime = DateTime.now();
-    print('⏱️ [${startTime.toIso8601String()}] Follow button tapped for ${widget.profile.displayNameOrName} (${widget.profile.pubkey})');
+    print('Follow button tapped for ${widget.profile.displayNameOrName}');
     
     try {
-      final beforeServiceCall = DateTime.now();
-      print('⏱️ [${beforeServiceCall.toIso8601String()}] Calling followProfile service...');
-      
-      final success = await _followService.followProfile(widget.profile.pubkey);
-      
-      final afterServiceCall = DateTime.now();
-      final serviceCallDuration = afterServiceCall.difference(beforeServiceCall);
-      print('⏱️ [${afterServiceCall.toIso8601String()}] followProfile service returned: $success (took ${serviceCallDuration.inMilliseconds}ms)');
+      // Call non-blocking follow method
+      final success = await _followService.followProfileNonBlocking(widget.profile.pubkey);
       
       if (success && mounted) {
-        final beforeSnackbar = DateTime.now();
-        print('⏱️ [${beforeSnackbar.toIso8601String()}] Showing success snackbar...');
-        
+        // Show success immediately
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Following ${widget.profile.displayNameOrName}'),
+            content: Text('Following ${widget.profile.displayNameOrName} 🎉'),
             backgroundColor: Colors.green,
+            duration: const Duration(seconds: 2),
           ),
         );
-        
-        final afterSnackbar = DateTime.now();
-        final totalDuration = afterSnackbar.difference(startTime);
-        print('⏱️ [${afterSnackbar.toIso8601String()}] ✅ Follow process completed (total time: ${totalDuration.inMilliseconds}ms)');
       } else if (!success && mounted) {
-        final beforeSnackbar = DateTime.now();
-        print('⏱️ [${beforeSnackbar.toIso8601String()}] Showing failure snackbar...');
-        
+        // Show failure only if initial check failed (not logged in)
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Follow failed. Please login to follow users.'),
+            content: Text('Please login to follow users'),
             backgroundColor: Colors.orange,
           ),
         );
-        
-        final afterSnackbar = DateTime.now();
-        final totalDuration = afterSnackbar.difference(startTime);
-        print('⏱️ [${afterSnackbar.toIso8601String()}] ❌ Follow process failed (total time: ${totalDuration.inMilliseconds}ms)');
       }
     } catch (e) {
-      final errorTime = DateTime.now();
-      final totalDuration = errorTime.difference(startTime);
-      print('⏱️ [${errorTime.toIso8601String()}] ❌ Error following user: $e (total time: ${totalDuration.inMilliseconds}ms)');
+      print('Error following user: $e');
       
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
