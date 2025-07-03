@@ -1,4 +1,5 @@
 import 'package:ndk/ndk.dart';
+import 'package:ndk/shared/nips/nip01/bip340.dart';
 import 'package:ndk_rust_verifier/ndk_rust_verifier.dart';
 import 'package:flutter/foundation.dart';
 import 'package:logger/logger.dart';
@@ -84,8 +85,8 @@ class NdkService {
     final privateKey = await _keyManagementService.getPrivateKey();
     if (privateKey != null && privateKey.isNotEmpty) {
       try {
-        // Generate pubkey from private key using NDK's Bip340
-        final pubkey = ndk.Bip340.getPublicKey(privateKey);
+        // Generate pubkey from private key using Bip340
+        final pubkey = Bip340.getPublicKey(privateKey);
         
         debugPrint('Loading account with pubkey: $pubkey');
         _ndk!.accounts.loginPrivateKey(pubkey: pubkey, privkey: privateKey);
@@ -114,8 +115,8 @@ class NdkService {
         throw Exception('Failed to get hex private key');
       }
       
-      // Extract pubkey from private key using NDK's Bip340
-      final pubkey = ndk.Bip340.getPublicKey(hexPrivateKey);
+      // Extract pubkey from private key using Bip340
+      final pubkey = Bip340.getPublicKey(hexPrivateKey);
       
       debugPrint('Attempting to login with pubkey: $pubkey');
       
