@@ -120,4 +120,9 @@ class ProfileAdapter {
     }
   }
   
+  /// Publish profile update (alias for updateProfile for consistency)
+  Future<bool> publishProfile(NostrProfile profile) async {
+    return updateProfile(profile);
+  }
+  
 }

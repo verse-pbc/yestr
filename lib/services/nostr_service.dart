@@ -611,6 +611,51 @@ class NostrService {
   }
   */
   
+  /// Publish profile update (kind 0 event)
+  Future<bool> publishProfile(NostrProfile profile) async {
+    try {
+      // Create profile content JSON
+      final profileContent = <String, dynamic>{};
+      
+      if (profile.name != null) profileContent['name'] = profile.name;
+      if (profile.displayName != null) profileContent['display_name'] = profile.displayName;
+      if (profile.about != null) profileContent['about'] = profile.about;
+      if (profile.picture != null) profileContent['picture'] = profile.picture;
+      if (profile.banner != null) profileContent['banner'] = profile.banner;
+      if (profile.nip05 != null) profileContent['nip05'] = profile.nip05;
+      if (profile.lud16 != null) profileContent['lud16'] = profile.lud16;
+      if (profile.website != null) profileContent['website'] = profile.website;
+      
+      // Create event data for kind 0 (profile metadata)
+      final eventData = {
+        'kind': 0,
+        'content': jsonEncode(profileContent),
+        'tags': [], // No tags needed for profile events
+      };
+      
+      // Publish using existing publishEvent method
+      final success = await publishEvent(eventData);
+      
+      if (success) {
+        print('NostrService: Successfully published profile update');
+        
+        // Update local cache
+        final index = _profiles.indexWhere((p) => p.pubkey == profile.pubkey);
+        if (index != -1) {
+          _profiles[index] = profile;
+        } else {
+          _profiles.add(profile);
+        }
+        _profilesController.add(profile);
+      }
+      
+      return success;
+    } catch (e) {
+      print('NostrService: Error publishing profile: $e');
+      return false;
+    }
+  }
+  
   Future<bool> _publishEventLegacy(Map<String, dynamic> eventData) async {
     // Legacy implementation
     try {

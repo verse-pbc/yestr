@@ -9,6 +9,7 @@ import '../screens/saved_profiles_screen.dart';
 import '../screens/card_overlay_screen.dart';
 import '../screens/messages/messages_screen.dart';
 import '../screens/trending_screen.dart';
+import '../screens/my_profile_screen.dart';
 
 class AppDrawer extends StatefulWidget {
   const AppDrawer({super.key});
@@ -64,6 +65,7 @@ class _AppDrawerState extends State<AppDrawer> {
     bool isOnSavedScreen = false;
     bool isOnMessagesScreen = false;
     bool isOnTrendingScreen = false;
+    bool isOnMyProfileScreen = false;
     context.visitAncestorElements((element) {
       final typeName = element.widget.runtimeType.toString();
       if (typeName == 'SavedProfilesScreen') {
@@ -75,11 +77,14 @@ class _AppDrawerState extends State<AppDrawer> {
       } else if (typeName == 'TrendingScreen') {
         isOnTrendingScreen = true;
         return false;
+      } else if (typeName == 'MyProfileScreen') {
+        isOnMyProfileScreen = true;
+        return false;
       }
       return true;
     });
     
-    final isOnDiscoverScreen = !isOnSavedScreen && !isOnMessagesScreen && !isOnTrendingScreen;
+    final isOnDiscoverScreen = !isOnSavedScreen && !isOnMessagesScreen && !isOnTrendingScreen && !isOnMyProfileScreen;
 
     return Drawer(
       backgroundColor: const Color(0xFF1a1c22),
@@ -172,6 +177,25 @@ class _AppDrawerState extends State<AppDrawer> {
                   },
                   isSelected: isOnSavedScreen,
                 ),
+                if (_isLoggedIn) ...[
+                  _buildDrawerItem(
+                    context,
+                    icon: Icons.person,
+                    title: 'My Profile',
+                    onTap: () {
+                      Navigator.pop(context);
+                      if (!isOnMyProfileScreen) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const MyProfileScreen(),
+                          ),
+                        );
+                      }
+                    },
+                    isSelected: isOnMyProfileScreen,
+                  ),
+                ],
                 _buildDrawerItem(
                   context,
                   icon: Icons.settings,
