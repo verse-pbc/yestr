@@ -7,6 +7,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:convert/convert.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/nostr_profile.dart';
 import '../services/nostr_service.dart';
 import '../services/nostr_band_api_service.dart';
@@ -24,6 +25,7 @@ import '../services/key_management_service.dart';
 import '../services/direct_message_service_v2.dart';
 import '../services/dm_notification_service.dart';
 import '../screens/messages/conversation_screen.dart';
+import '../utils/avatar_helper.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -133,9 +135,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
                 CircleAvatar(
                   radius: 16,
                   backgroundColor: Colors.grey[800],
-                  backgroundImage: notification.senderProfile.picture != null
-                      ? NetworkImage(notification.senderProfile.picture!)
-                      : null,
+                  backgroundImage: CachedNetworkImageProvider(
+                    AvatarHelper.getThumbnail(notification.senderProfile.pubkey),
+                  ),
                   child: notification.senderProfile.picture == null
                       ? Text(
                           notification.senderProfile.displayNameOrName[0].toUpperCase(),

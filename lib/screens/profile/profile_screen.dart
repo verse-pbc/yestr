@@ -12,6 +12,7 @@ import '../../widgets/share_note_sheet.dart';
 import '../../widgets/dm_composer.dart';
 import '../../widgets/image_lightbox.dart';
 import '../../widgets/gradient_background.dart';
+import '../../utils/avatar_helper.dart';
 
 class ProfileScreen extends StatefulWidget {
   final NostrProfile profile;
@@ -77,51 +78,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
             flexibleSpace: FlexibleSpaceBar(
               title: Text(widget.profile.displayNameOrName),
               background: GestureDetector(
-                onTap: widget.profile.picture != null
-                    ? () {
-                        Navigator.of(context).push(
-                          PageRouteBuilder(
-                            opaque: false,
-                            barrierColor: Colors.black.withOpacity(0.9),
-                            pageBuilder: (context, animation, secondaryAnimation) {
-                              return FadeTransition(
-                                opacity: animation,
-                                child: ImageLightbox(
-                                  imageUrl: widget.profile.picture!,
-                                  heroTag: 'profile-image-${widget.profile.pubkey}',
-                                ),
-                              );
-                            },
+                onTap: () {
+                  // Use proxy URL for lightbox too
+                  final imageUrl = AvatarHelper.getLarge(widget.profile.pubkey);
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      opaque: false,
+                      barrierColor: Colors.black.withOpacity(0.9),
+                      pageBuilder: (context, animation, secondaryAnimation) {
+                        return FadeTransition(
+                          opacity: animation,
+                          child: ImageLightbox(
+                            imageUrl: imageUrl,
+                            heroTag: 'profile-image-${widget.profile.pubkey}',
                           ),
                         );
-                      }
-                    : null,
+                      },
+                    ),
+                  );
+                },
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    // Profile image
-                    widget.profile.picture != null
-                        ? Hero(
-                            tag: 'profile-image-${widget.profile.pubkey}',
-                            child: CachedNetworkImage(
-                              imageUrl: widget.profile.picture!,
-                              fit: BoxFit.cover,
-                              errorWidget: (context, url, error) {
-                                return Container(
-                                  color: Colors.grey[300],
-                                  child: const Center(
-                                    child: Icon(Icons.error, size: 50),
-                                  ),
-                                );
-                              },
-                            ),
-                          )
-                        : Container(
+                    // Profile image - always use proxy
+                    Hero(
+                      tag: 'profile-image-${widget.profile.pubkey}',
+                      child: CachedNetworkImage(
+                        imageUrl: AvatarHelper.getLarge(widget.profile.pubkey),
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) {
+                          return Container(
                             color: Colors.grey[300],
                             child: const Center(
                               child: Icon(Icons.person, size: 120),
                             ),
-                          ),
+                          );
+                        },
+                      ),
+                    ),
                     // Gradient overlay (same as ProfileCard)
                     Positioned.fill(
                       child: Container(
@@ -372,12 +372,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
             Row(
               children: [
                 CircleAvatar(
-                  backgroundImage: widget.profile.picture != null
-                      ? CachedNetworkImageProvider(widget.profile.picture!)
-                      : null,
-                  child: widget.profile.picture == null
-                      ? const Icon(Icons.person)
-                      : null,
+                  backgroundImage: CachedNetworkImageProvider(
+                    AvatarHelper.getThumbnail(widget.profile.pubkey),
+                  ),
                   radius: 20,
                 ),
                 const SizedBox(width: 12),

@@ -8,6 +8,7 @@ import '../services/ndk_backup/ndk_service.dart';
 import '../services/ndk_backup/adapters/profile_adapter.dart';
 import '../widgets/gradient_background.dart';
 import '../utils/validation.dart';
+import '../utils/avatar_helper.dart';
 
 class MyProfileScreen extends StatefulWidget {
   const MyProfileScreen({super.key});
@@ -263,10 +264,12 @@ class _MyProfileScreenState extends State<MyProfileScreen> {
                             CircleAvatar(
                               radius: 60,
                               backgroundColor: Colors.grey[300],
-                              backgroundImage: _pictureController.text.isNotEmpty
-                                  ? CachedNetworkImageProvider(_pictureController.text)
+                              backgroundImage: _currentPubkey != null
+                                  ? CachedNetworkImageProvider(
+                                      AvatarHelper.getMedium(_currentPubkey!),
+                                    )
                                   : null,
-                              child: _pictureController.text.isEmpty
+                              child: _currentPubkey == null
                                   ? const Icon(Icons.person, size: 60, color: Colors.grey)
                                   : null,
                             ),

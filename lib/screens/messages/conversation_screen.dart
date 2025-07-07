@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../models/nostr_profile.dart';
 import '../../services/direct_message_service_v2.dart';
 import '../../services/nostr_service.dart';
@@ -9,6 +10,7 @@ import '../../services/conversation_subscription_service.dart';
 import '../../services/dm_notification_service.dart';
 import '../../models/direct_message.dart';
 import '../../widgets/gradient_background.dart';
+import '../../utils/avatar_helper.dart';
 
 class ConversationScreen extends StatefulWidget {
   final NostrProfile profile;
@@ -302,9 +304,9 @@ class _ConversationScreenState extends State<ConversationScreen> {
               CircleAvatar(
                 radius: 20,
                 backgroundColor: Colors.grey[800],
-                backgroundImage: widget.profile.picture != null
-                    ? NetworkImage(widget.profile.picture!)
-                    : null,
+                backgroundImage: CachedNetworkImageProvider(
+                  AvatarHelper.getThumbnail(widget.profile.pubkey),
+                ),
                 child: widget.profile.picture == null
                     ? Text(
                         widget.profile.displayNameOrName[0].toUpperCase(),

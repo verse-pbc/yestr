@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/nostr_profile.dart';
 import '../services/direct_message_service_v2.dart';
 import '../services/nip17_dm_service.dart';
 import '../services/key_management_service.dart';
+import '../utils/avatar_helper.dart';
 
 class DirectMessageComposer extends StatefulWidget {
   final NostrProfile recipient;
@@ -142,12 +144,9 @@ class _DirectMessageComposerState extends State<DirectMessageComposer> {
           child: Row(
             children: [
               CircleAvatar(
-                backgroundImage: widget.recipient.picture != null
-                    ? NetworkImage(widget.recipient.picture!)
-                    : null,
-                child: widget.recipient.picture == null
-                    ? const Icon(Icons.person)
-                    : null,
+                backgroundImage: CachedNetworkImageProvider(
+                  AvatarHelper.getThumbnail(widget.recipient.pubkey),
+                ),
                 radius: 24,
               ),
               const SizedBox(width: 12),

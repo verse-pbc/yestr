@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../../services/direct_message_service_v2.dart';
 import '../../services/nostr_service.dart';
 import '../../services/key_management_service.dart';
@@ -9,6 +10,7 @@ import '../../models/conversation.dart';
 import '../../widgets/app_drawer.dart';
 import 'conversation_screen.dart';
 import '../../widgets/gradient_background.dart';
+import '../../utils/avatar_helper.dart';
 
 class MessagesScreen extends StatefulWidget {
   const MessagesScreen({super.key});
@@ -310,9 +312,9 @@ class _MessagesScreenState extends State<MessagesScreen> {
                             leading: CircleAvatar(
                               radius: 28,
                               backgroundColor: Colors.grey[800],
-                              backgroundImage: conversation.profile.picture != null
-                                  ? NetworkImage(conversation.profile.picture!)
-                                  : null,
+                              backgroundImage: CachedNetworkImageProvider(
+                                AvatarHelper.getThumbnail(conversation.profile.pubkey),
+                              ),
                               child: conversation.profile.picture == null
                                   ? Text(
                                       conversation.profile.displayNameOrName[0].toUpperCase(),

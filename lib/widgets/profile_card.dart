@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/nostr_profile.dart';
 import '../screens/profile/profile_screen.dart';
+import '../utils/avatar_helper.dart';
 
 class ProfileCard extends StatelessWidget {
   final NostrProfile profile;
@@ -45,39 +46,33 @@ class ProfileCard extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(
-              child: profile.picture != null
-                  ? Builder(
-                      builder: (context) {
-                        return CachedNetworkImage(
-                          imageUrl: profile.picture!,
-                          fit: BoxFit.cover,
-                          placeholder: (context, url) => Container(
-                            color: Colors.grey[300],
-                            child: const Center(
-                              child: CircularProgressIndicator(),
-                            ),
-                          ),
-                          errorWidget: (context, url, error) {
-                            return Container(
-                              color: Colors.grey[300],
-                              child: const Icon(
-                                Icons.person,
-                                size: 100,
-                                color: Colors.grey,
-                              ),
-                            );
-                          },
-                        );
-                      },
-                    )
-                  : Container(
+              child: Builder(
+                builder: (context) {
+                  // Always use proxy URL for profile pictures
+                  final imageUrl = AvatarHelper.getMedium(profile.pubkey);
+                  
+                  return CachedNetworkImage(
+                    imageUrl: imageUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
                       color: Colors.grey[300],
-                      child: const Icon(
-                        Icons.person,
-                        size: 100,
-                        color: Colors.grey,
+                      child: const Center(
+                        child: CircularProgressIndicator(),
                       ),
                     ),
+                    errorWidget: (context, url, error) {
+                      return Container(
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.person,
+                          size: 100,
+                          color: Colors.grey,
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
             Positioned.fill(
               child: Container(
