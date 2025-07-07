@@ -26,6 +26,7 @@ import '../services/direct_message_service_v2.dart';
 import '../services/dm_notification_service.dart';
 import '../screens/messages/conversation_screen.dart';
 import '../utils/avatar_helper.dart';
+import '../utils/profile_image_preloader.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -223,6 +224,14 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
             _isLoading = false;
           });
           apiSuccess = true;
+          
+          // Preload profile images for better performance
+          ProfileImagePreloader.preloadProfileImages(
+            context,
+            _profiles.take(10).toList(), // Preload first 10 profiles
+            includeThumbnails: false, // We don't use thumbnails in card view
+            includeMedium: true, // We use medium size for cards and profile screen
+          );
           
           print('\n=== RANDOM PROFILES LOADED IN APP ===');
           print('Total profiles in app: ${_profiles.length}');
@@ -856,6 +865,15 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
               // Add new unique profiles at the end
               _profiles.addAll(uniqueNewProfiles);
             });
+            
+            // Preload new profile images
+            ProfileImagePreloader.preloadProfileImages(
+              context,
+              uniqueNewProfiles.take(5).toList(), // Preload next 5 profiles
+              includeThumbnails: false,
+              includeMedium: true,
+            );
+            
             return;
           }
         }

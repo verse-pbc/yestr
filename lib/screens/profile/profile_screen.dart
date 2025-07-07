@@ -79,8 +79,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               title: Text(widget.profile.displayNameOrName),
               background: GestureDetector(
                 onTap: () {
-                  // Use proxy URL for lightbox too
-                  final imageUrl = AvatarHelper.getLarge(widget.profile.pubkey);
+                  // Use medium size for lightbox too, to reuse cache
+                  final imageUrl = AvatarHelper.getMedium(widget.profile.pubkey);
                   Navigator.of(context).push(
                     PageRouteBuilder(
                       opaque: false,
@@ -104,7 +104,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     Hero(
                       tag: 'profile-image-${widget.profile.pubkey}',
                       child: CachedNetworkImage(
-                        imageUrl: AvatarHelper.getLarge(widget.profile.pubkey),
+                        // Use the same medium size as ProfileCard to reuse cached image
+                        imageUrl: AvatarHelper.getMedium(widget.profile.pubkey),
                         fit: BoxFit.cover,
                         placeholder: (context, url) => Container(
                           color: Colors.grey[300],

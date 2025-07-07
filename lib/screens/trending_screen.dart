@@ -13,6 +13,7 @@ import '../widgets/gradient_background.dart';
 import '../widgets/dm_composer.dart';
 import '../services/key_management_service.dart';
 import '../services/direct_message_service_v2.dart';
+import '../utils/profile_image_preloader.dart';
 
 class TrendingScreen extends StatefulWidget {
   const TrendingScreen({super.key});
@@ -65,6 +66,14 @@ class _TrendingScreenState extends State<TrendingScreen> {
             _isLoading = false;
           });
           apiSuccess = true;
+          
+          // Preload profile images for better performance
+          ProfileImagePreloader.preloadProfileImages(
+            context,
+            _profiles.take(10).toList(), // Preload first 10 profiles
+            includeThumbnails: false, // We don't use thumbnails in card view
+            includeMedium: true, // We use medium size for cards
+          );
           
           print('\n=== TRENDING PROFILES LOADED ===');
           print('Total profiles: ${_profiles.length}');
