@@ -54,10 +54,22 @@ class ProfileCard extends StatelessWidget {
                   return CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
+                    // Fade in animation for smooth appearance
+                    fadeInDuration: const Duration(milliseconds: 200),
+                    fadeOutDuration: const Duration(milliseconds: 100),
+                    // Use memory cache aggressively
+                    memCacheWidth: 400,
+                    memCacheHeight: 600,
+                    // Show a subtle loading state
                     placeholder: (context, url) => Container(
                       color: Colors.grey[300],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.grey[400]!,
+                          ),
+                        ),
                       ),
                     ),
                     errorWidget: (context, url, error) {

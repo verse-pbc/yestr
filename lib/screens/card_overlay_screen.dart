@@ -27,6 +27,8 @@ import '../services/dm_notification_service.dart';
 import '../screens/messages/conversation_screen.dart';
 import '../utils/avatar_helper.dart';
 import '../utils/profile_image_preloader.dart';
+import '../utils/image_cache_warmer.dart';
+import '../services/app_initialization_service.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -199,6 +201,44 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
 
   Future<void> _loadProfiles() async {
     try {
+      // Check if we have preloaded profiles
+      final initService = AppInitializationService();
+      if (initService.isInitialized && initService.preloadedProfiles.isNotEmpty) {
+        print('CardOverlayScreen: Using preloaded profiles');
+        
+        // Use preloaded profiles immediately
+        final preloadedProfiles = initService.preloadedProfiles;
+        
+        if (mounted) {
+          setState(() {
+            _profiles = List.from(preloadedProfiles);
+            
+            // Insert special profile at position 10 if we have enough profiles
+            if (_profiles.length >= 10) {
+              _insertSpecialProfile();
+            }
+            
+            _isLoading = false;
+          });
+          
+          print('\n=== USING PRELOADED PROFILES ===');
+          print('Total profiles: ${_profiles.length}');
+          print('================================\n');
+        }
+        
+        // Clear preloaded data to free memory
+        initService.clearPreloadedData();
+        
+        // Connect to Nostr for other services in background
+        _nostrService.connect();
+        _savedProfilesService.loadSavedProfiles();
+        
+        return; // Exit early, we're done
+      }
+      
+      // If no preloaded profiles, continue with normal flow
+      print('CardOverlayScreen: No preloaded profiles, fetching fresh...');
+      
       // Connect to Nostr for other services (follow, saved profiles, etc)
       await _nostrService.connect();
       
@@ -213,30 +253,65 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
         final profiles = await _yestrRelayService.getRandomProfiles(count: 50);
         
         if (profiles.isNotEmpty && mounted) {
-          setState(() {
-            _profiles = List.from(profiles);
-            
-            // Insert special profile at position 10 if we have enough profiles
-            if (_profiles.length >= 10) {
-              _insertSpecialProfile();
-            }
-            
-            _isLoading = false;
-          });
-          apiSuccess = true;
+          // Store profiles but don't update UI yet
+          final loadedProfiles = List<NostrProfile>.from(profiles);
           
-          // Preload profile images for better performance
-          ProfileImagePreloader.preloadProfileImages(
+          // Insert special profile at position 10 if we have enough profiles
+          if (loadedProfiles.length >= 10) {
+            // Insert special profile into the list
+            const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
+            final specialProfile = NostrProfile(
+              pubkey: specialPubkey,
+              name: 'Special Profile',
+              displayName: 'Special Profile',
+              about: 'Loading profile...',
+              picture: null,
+              banner: null,
+              nip05: null,
+              lud16: null,
+              website: null,
+              createdAt: DateTime.now(),
+            );
+            loadedProfiles.insert(9, specialProfile);
+          }
+          
+          // Start preloading images in parallel
+          final preloadFuture = ProfileImagePreloader.preloadProfileImages(
             context,
-            _profiles.take(10).toList(), // Preload first 10 profiles
-            includeThumbnails: false, // We don't use thumbnails in card view
-            includeMedium: true, // We use medium size for cards and profile screen
+            loadedProfiles.take(10).toList(), // Preload first 10 profiles
+            includeThumbnails: false,
+            includeMedium: true,
           );
           
+          // Don't wait for preload to complete, but give it a small head start
+          // This allows images to start loading before UI updates
+          await Future.delayed(const Duration(milliseconds: 100));
+          
+          // Now update the UI
+          if (mounted) {
+            setState(() {
+              _profiles = loadedProfiles;
+              _isLoading = false;
+            });
+            apiSuccess = true;
+          }
+          
+          // Continue preloading in background
+          preloadFuture.then((_) {
+            print('Profile images preloaded successfully');
+          }).catchError((e) {
+            print('Error preloading images: $e');
+          });
+          
+          // Request special profile if needed
+          if (loadedProfiles.length >= 10) {
+            _requestSpecificProfile('e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a');
+          }
+          
           print('\n=== RANDOM PROFILES LOADED IN APP ===');
-          print('Total profiles in app: ${_profiles.length}');
-          for (int i = 0; i < _profiles.length && i < 10; i++) {
-            print('${i + 1}. ${_profiles[i].pubkey} - ${_profiles[i].displayNameOrName}');
+          print('Total profiles in app: ${loadedProfiles.length}');
+          for (int i = 0; i < loadedProfiles.length && i < 10; i++) {
+            print('${i + 1}. ${loadedProfiles[i].pubkey} - ${loadedProfiles[i].displayNameOrName}');
           }
           print('=====================================\n');
         }
@@ -254,16 +329,31 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
         await _nostrService.requestProfilesWithLimit(limit: 100);
         
         // Listen for profiles from Nostr
+        final profileBuffer = <NostrProfile>[];
         _nostrService.profilesStream.listen((profile) {
           if (mounted) {
-            setState(() {
-              // Add profiles up to a limit
-              if (_profiles.length < 50) {
-                _profiles.add(profile);
-                print('RELAY PROFILE ADDED: ${profile.pubkey} - ${profile.displayNameOrName}');
+            // Buffer profiles to batch UI updates
+            profileBuffer.add(profile);
+            print('RELAY PROFILE ADDED: ${profile.pubkey} - ${profile.displayNameOrName}');
+            
+            // Update UI in batches
+            if (profileBuffer.length >= 5 || (_profiles.isEmpty && profileBuffer.isNotEmpty)) {
+              final newProfiles = List<NostrProfile>.from(profileBuffer);
+              profileBuffer.clear();
+              
+              // Start preloading images for new profiles
+              ProfileImagePreloader.preloadProfileImages(
+                context,
+                newProfiles,
+                includeThumbnails: false,
+                includeMedium: true,
+              );
+              
+              setState(() {
+                _profiles.addAll(newProfiles);
                 
                 // Insert special profile at position 10 if we have enough profiles
-                if (_profiles.length == 10) {
+                if (_profiles.length >= 10 && _profiles.length - newProfiles.length < 10) {
                   _insertSpecialProfile();
                 }
                 
@@ -271,8 +361,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
                 if (_profiles.length >= 10) {
                   _isLoading = false;
                 }
-              }
-            });
+              });
+            }
           }
         });
         
@@ -289,8 +379,18 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
       // Listen for any new trending profile fetches
       _nostrBandApiService.profilesStream.listen((profiles) {
         if (mounted && _profiles.isEmpty) {
+          final loadedProfiles = List<NostrProfile>.from(profiles);
+          
+          // Start preloading images immediately
+          ProfileImagePreloader.preloadProfileImages(
+            context,
+            loadedProfiles.take(10).toList(),
+            includeThumbnails: false,
+            includeMedium: true,
+          );
+          
           setState(() {
-            _profiles = List.from(profiles);
+            _profiles = loadedProfiles;
             
             // Insert special profile at position 10 if we have enough profiles
             if (_profiles.length >= 10) {

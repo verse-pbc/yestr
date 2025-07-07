@@ -61,22 +61,38 @@ class _TrendingScreenState extends State<TrendingScreen> {
         final profiles = await _nostrBandApiService.fetchTrendingProfiles();
         
         if (profiles.isNotEmpty && mounted) {
-          setState(() {
-            _profiles = List.from(profiles);
-            _isLoading = false;
-          });
-          apiSuccess = true;
+          // Store profiles but don't update UI yet
+          final loadedProfiles = List<NostrProfile>.from(profiles);
           
-          // Preload profile images for better performance
-          ProfileImagePreloader.preloadProfileImages(
+          // Start preloading images in parallel
+          final preloadFuture = ProfileImagePreloader.preloadProfileImages(
             context,
-            _profiles.take(10).toList(), // Preload first 10 profiles
-            includeThumbnails: false, // We don't use thumbnails in card view
-            includeMedium: true, // We use medium size for cards
+            loadedProfiles.take(10).toList(), // Preload first 10 profiles
+            includeThumbnails: false,
+            includeMedium: true,
           );
           
+          // Give images a small head start to begin loading
+          await Future.delayed(const Duration(milliseconds: 100));
+          
+          // Now update the UI
+          if (mounted) {
+            setState(() {
+              _profiles = loadedProfiles;
+              _isLoading = false;
+            });
+            apiSuccess = true;
+          }
+          
+          // Continue preloading in background
+          preloadFuture.then((_) {
+            print('Trending profile images preloaded successfully');
+          }).catchError((e) {
+            print('Error preloading trending images: $e');
+          });
+          
           print('\n=== TRENDING PROFILES LOADED ===');
-          print('Total profiles: ${_profiles.length}');
+          print('Total profiles: ${loadedProfiles.length}');
           print('================================\n');
         }
       } catch (apiError) {

@@ -5,7 +5,7 @@ import '../services/ndk_backup/ndk_service.dart';
 import '../services/follow_service_ndk.dart';
 import '../services/web_background_service.dart';
 import '../services/service_migration_helper.dart';
-import '../services/ndk_backup/ndk_service.dart';
+import '../services/app_initialization_service.dart';
 import '../widgets/gradient_background.dart';
 import 'card_overlay_screen.dart';
 
@@ -85,6 +85,14 @@ class _LoginScreenState extends State<LoginScreen> {
         }
       }
       
+      // Ensure app initialization is complete before navigating
+      final initService = AppInitializationService();
+      if (!initService.isInitialized) {
+        debugPrint('⏱️ [${DateTime.now().toIso8601String()}] Waiting for app initialization to complete...');
+        await initService.initializationComplete;
+        debugPrint('⏱️ [${DateTime.now().toIso8601String()}] App initialization complete');
+      }
+      
       // Navigate to main screen
       if (mounted) {
         Navigator.of(context).pushReplacement(
@@ -106,12 +114,34 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _handleSkip() async {
+    // Ensure app initialization is complete before navigating
+    final initService = AppInitializationService();
+    if (!initService.isInitialized) {
+      // Show loading indicator while waiting
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+      
+      await initService.initializationComplete;
+      
+      // Close loading dialog
+      if (mounted) {
+        Navigator.of(context).pop();
+      }
+    }
+    
     // Navigate without login for read-only mode
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(
-        builder: (context) => const CardOverlayScreen(),
-      ),
-    );
+    if (mounted) {
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(
+          builder: (context) => const CardOverlayScreen(),
+        ),
+      );
+    }
   }
 
   void _showError(String message) {

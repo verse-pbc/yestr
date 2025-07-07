@@ -17,43 +17,57 @@ class ProfileImagePreloader {
     
     final futures = <Future>[];
     
-    for (final profile in profiles) {
-      // Preload thumbnail size (used in lists)
-      if (includeThumbnails) {
-        futures.add(
-          precacheImage(
-            CachedNetworkImageProvider(
+    // Process in smaller batches for better performance
+    const batchSize = 3;
+    for (var i = 0; i < profiles.length; i += batchSize) {
+      final batch = profiles.skip(i).take(batchSize).toList();
+      
+      for (final profile in batch) {
+        // Preload thumbnail size (used in lists)
+        if (includeThumbnails) {
+          futures.add(
+            _preloadSingleImage(
+              context,
               AvatarHelper.getThumbnail(profile.pubkey),
             ),
-            context,
-          ).catchError((_) {
-            // Ignore errors for individual images
-            return null;
-          }),
-        );
-      }
-      
-      // Preload medium size (used in cards and profile details)
-      if (includeMedium) {
-        futures.add(
-          precacheImage(
-            CachedNetworkImageProvider(
+          );
+        }
+        
+        // Preload medium size (used in cards and profile details)
+        if (includeMedium) {
+          futures.add(
+            _preloadSingleImage(
+              context,
               AvatarHelper.getMedium(profile.pubkey),
             ),
-            context,
-          ).catchError((_) {
-            // Ignore errors for individual images
-            return null;
-          }),
-        );
+          );
+        }
+      }
+      
+      // Small delay between batches to avoid overwhelming the network
+      if (i + batchSize < profiles.length) {
+        futures.add(Future.delayed(const Duration(milliseconds: 50)));
       }
     }
     
-    // Wait for all images to load (with a timeout to prevent hanging)
+    // Don't wait forever - use a reasonable timeout
     await Future.wait(futures).timeout(
-      const Duration(seconds: 10),
+      const Duration(seconds: 8),
       onTimeout: () => [],
     );
+  }
+  
+  /// Preload a single image with error handling
+  static Future<void> _preloadSingleImage(BuildContext context, String url) async {
+    try {
+      await precacheImage(
+        CachedNetworkImageProvider(url),
+        context,
+      );
+    } catch (e) {
+      // Silently ignore individual image load failures
+      // The image will be loaded when actually displayed
+    }
   }
   
   /// Preload a single profile image
