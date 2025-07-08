@@ -56,7 +56,7 @@ class NdkService {
           'wss://nos.lol',
           'wss://relay.nostr.bg',
           'wss://relay.primal.net',
-          'wss://nostr.wine',
+          // 'wss://nostr.wine', // Temporarily disabled - causes "pubkey already authenticated" errors
           'wss://relay.nostr.wirednet.jp',
           'wss://offchain.pub',
           'wss://purplepag.es',
