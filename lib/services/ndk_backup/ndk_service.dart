@@ -48,7 +48,7 @@ class NdkService {
         cache: kIsWeb || database == null 
             ? MemCacheManager() 
             : NdkCacheManager(database),
-        // Bootstrap relays for initial connection
+        // Bootstrap relays for initial connection - include common DM relays
         bootstrapRelays: [
           'wss://relay.damus.io',
           'wss://relay.nostr.band',
@@ -56,9 +56,13 @@ class NdkService {
           'wss://nos.lol',
           'wss://relay.nostr.bg',
           'wss://relay.primal.net',
+          'wss://nostr.wine',
+          'wss://relay.nostr.wirednet.jp',
+          'wss://offchain.pub',
+          'wss://purplepag.es',
         ],
-        // Configure logging
-        logLevel: kDebugMode ? Level.trace : Level.warning,
+        // Configure logging - set to error level to hide connection status messages
+        logLevel: kDebugMode ? Level.error : Level.error,
       );
       
       debugPrint('🚀 NDK Configuration:');

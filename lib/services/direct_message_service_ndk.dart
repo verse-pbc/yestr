@@ -257,7 +257,7 @@ class DirectMessageServiceNdk {
       // Subscribe to gift-wrapped messages (NIP-59)
       final giftWrapFilter = Filter(
         kinds: [1059], // Gift wrap kind
-        tags: {'p': [_currentUserPubkey!]}, // Messages sent to us
+        pTags: [_currentUserPubkey!], // Messages sent to us - using pTags
         since: thirtyDaysAgoTimestamp,
         limit: _conversationsPerPage * 2,
       );
@@ -265,7 +265,7 @@ class DirectMessageServiceNdk {
       // Also subscribe to old-style DMs for compatibility (NIP-04)
       final legacyDmFilter = Filter(
         kinds: [4], // Legacy encrypted DM kind
-        tags: {'p': [_currentUserPubkey!]},
+        pTags: [_currentUserPubkey!],  // Using pTags
         since: thirtyDaysAgoTimestamp,
         limit: _conversationsPerPage * 2,
       );
@@ -313,7 +313,10 @@ class DirectMessageServiceNdk {
   /// Handle legacy encrypted message (NIP-04)
   Future<void> _handleLegacyMessage(Nip01Event event, bool isOutgoing) async {
     try {
-      print('[DM Service NDK] Handling legacy NIP-04 message');
+      print('[DM Service NDK] Handling legacy NIP-04 message - Event ID: ${event.id.substring(0, 8)}..., isOutgoing: $isOutgoing');
+      print('[DM Service NDK]   Event pubkey: ${event.pubKey.substring(0, 8)}...');
+      print('[DM Service NDK]   Event tags: ${event.tags}');
+      print('[DM Service NDK]   Event created at: ${DateTime.fromMillisecondsSinceEpoch(event.createdAt * 1000)}');
       
       String otherPubkey;
       String senderPubkey;
@@ -326,7 +329,10 @@ class DirectMessageServiceNdk {
           (tag) => tag.isNotEmpty && tag[0] == 'p',
           orElse: () => [],
         );
-        if (pTag.length < 2) return;
+        if (pTag.length < 2) {
+          print('[DM Service NDK] No p tag found in outgoing message');
+          return;
+        }
         recipientPubkey = pTag[1];
         otherPubkey = recipientPubkey;
       } else {
@@ -334,6 +340,8 @@ class DirectMessageServiceNdk {
         recipientPubkey = _currentUserPubkey!;
         otherPubkey = senderPubkey;
       }
+      
+      print('[DM Service NDK]   Sender: ${senderPubkey.substring(0, 8)}..., Recipient: ${recipientPubkey.substring(0, 8)}...');
 
       // Check cache first
       final cacheKey = '${event.id}_${event.content.hashCode}';
@@ -484,7 +492,7 @@ class DirectMessageServiceNdk {
       // Gift wrap messages
       final giftWrapFilter = Filter(
         kinds: [1059],
-        tags: {'p': [_currentUserPubkey!, pubkey]},
+        pTags: [_currentUserPubkey!, pubkey],  // Using pTags
         since: thirtyDaysAgoTimestamp,
         limit: 50,
       );
@@ -493,7 +501,7 @@ class DirectMessageServiceNdk {
       final incomingFilter = Filter(
         kinds: [4],
         authors: [pubkey],
-        tags: {'p': [_currentUserPubkey!]},
+        pTags: [_currentUserPubkey!],  // Using pTags
         since: thirtyDaysAgoTimestamp,
         limit: 50,
       );
@@ -502,7 +510,7 @@ class DirectMessageServiceNdk {
       final outgoingFilter = Filter(
         kinds: [4],
         authors: [_currentUserPubkey!],
-        tags: {'p': [pubkey]},
+        pTags: [pubkey],  // Using pTags
         since: thirtyDaysAgoTimestamp,
         limit: 50,
       );
@@ -561,39 +569,57 @@ class DirectMessageServiceNdk {
     
     print('[DM Service NDK] Subscribing to conversation messages with $otherPubkey');
     
+    // Try to get the other user's metadata to find their relays
+    try {
+      final metadata = await _ndkService.ndk.metadata.loadMetadata(otherPubkey);
+      if (metadata != null) {
+        print('[DM Service NDK] Found metadata for ${metadata.displayName ?? metadata.name ?? otherPubkey.substring(0, 8)}');
+      }
+      
+      // The NDK JIT engine should automatically use the outbox model to find the right relays
+      // based on the user's write relays (kind 10002 events)
+      print('[DM Service NDK] Using NDK JIT engine with outbox model for optimal relay selection');
+    } catch (e) {
+      print('[DM Service NDK] Error loading other user metadata: $e');
+    }
+    
     // Cancel existing conversation-specific subscriptions
     _ndkSubscriptions['conv_gift']?.cancel();
     _ndkSubscriptions['conv_in']?.cancel();
     _ndkSubscriptions['conv_out']?.cancel();
     
-    // Get recent messages and all future messages
-    final oneMinuteAgo = DateTime.now().subtract(const Duration(minutes: 1));
-    final oneMinuteAgoTimestamp = oneMinuteAgo.millisecondsSinceEpoch ~/ 1000;
+    // Fetch historical messages first (last 7 days)
+    final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+    final sevenDaysAgoTimestamp = sevenDaysAgo.millisecondsSinceEpoch ~/ 1000;
+    
+    // Query for historical messages
+    await _fetchHistoricalMessages(otherPubkey, sevenDaysAgoTimestamp);
+    
+    // Now subscribe to real-time updates (from 5 minutes ago to catch any recent messages)
+    final fiveMinutesAgo = DateTime.now().subtract(const Duration(minutes: 5));
+    final fiveMinutesAgoTimestamp = fiveMinutesAgo.millisecondsSinceEpoch ~/ 1000;
     
     // Subscribe to gift wrap messages in this conversation
     final giftWrapFilter = Filter(
       kinds: [1059],
-      tags: {'p': [_currentUserPubkey!, otherPubkey]},
-      since: oneMinuteAgoTimestamp,
-      limit: 20,
+      pTags: [_currentUserPubkey!, otherPubkey],  // Using pTags
+      since: fiveMinutesAgoTimestamp,
     );
     
     // Subscribe to incoming legacy messages from the other user
     final incomingFilter = Filter(
       kinds: [4],
       authors: [otherPubkey],
-      tags: {'p': [_currentUserPubkey!]},
-      since: oneMinuteAgoTimestamp,
-      limit: 20,
+      pTags: [_currentUserPubkey!],  // Using pTags
+      since: fiveMinutesAgoTimestamp,
     );
     
     // Subscribe to our sent messages
     final outgoingFilter = Filter(
       kinds: [4, 1059],
       authors: [_currentUserPubkey!],
-      tags: {'p': [otherPubkey]},
-      since: oneMinuteAgoTimestamp,
-      limit: 20,
+      pTags: [otherPubkey],  // Using pTags
+      since: fiveMinutesAgoTimestamp,
     );
     
     final giftRequest = _ndkService.ndk.requests.subscription(filters: [giftWrapFilter]);
@@ -613,6 +639,71 @@ class DirectMessageServiceNdk {
             _handleLegacyMessage(event, true);
           }
         });
+  }
+  
+  /// Fetch historical messages for a conversation
+  Future<void> _fetchHistoricalMessages(String otherPubkey, int since) async {
+    print('[DM Service NDK] Fetching historical messages with $otherPubkey since $since');
+    
+    try {
+      // Query for incoming messages - using pTags for better compatibility
+      final incomingFilter = Filter(
+        kinds: [4],
+        authors: [otherPubkey],
+        pTags: [_currentUserPubkey!],  // Using pTags instead of tags
+        since: since,
+        limit: 100,
+      );
+      
+      // Query for outgoing messages
+      final outgoingFilter = Filter(
+        kinds: [4],
+        authors: [_currentUserPubkey!],
+        pTags: [otherPubkey],  // Using pTags instead of tags
+        since: since,
+        limit: 100,
+      );
+      
+      print('[DM Service NDK] Querying with filters:');
+      print('[DM Service NDK]   Incoming: authors=[${otherPubkey.substring(0, 8)}...], pTags=[${_currentUserPubkey!.substring(0, 8)}...], since=$since');
+      print('[DM Service NDK]   Outgoing: authors=[${_currentUserPubkey!.substring(0, 8)}...], pTags=[${otherPubkey.substring(0, 8)}...], since=$since');
+      
+      // Execute queries with timeout
+      final incomingEvents = await _ndkService.ndk.requests.query(
+        filters: [incomingFilter],
+      ).stream.toList().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('[DM Service NDK] Timeout waiting for incoming messages');
+          return [];
+        },
+      );
+      
+      final outgoingEvents = await _ndkService.ndk.requests.query(
+        filters: [outgoingFilter],
+      ).stream.toList().timeout(
+        const Duration(seconds: 10),
+        onTimeout: () {
+          print('[DM Service NDK] Timeout waiting for outgoing messages');
+          return [];
+        },
+      );
+      
+      print('[DM Service NDK] Found ${incomingEvents.length} incoming and ${outgoingEvents.length} outgoing messages');
+      
+      // Process messages
+      for (final event in incomingEvents) {
+        await _handleLegacyMessage(event, false);
+      }
+      
+      for (final event in outgoingEvents) {
+        await _handleLegacyMessage(event, true);
+      }
+      
+    } catch (e) {
+      print('[DM Service NDK] Error fetching historical messages: $e');
+      print('[DM Service NDK] Stack trace: ${StackTrace.current}');
+    }
   }
 
   /// Mark conversation as read

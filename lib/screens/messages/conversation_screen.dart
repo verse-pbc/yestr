@@ -189,37 +189,36 @@ class _ConversationScreenState extends State<ConversationScreen> {
       // Force the service to check for new messages from relays
       await _dmService.subscribeToConversationMessages(widget.profile.pubkey);
       
-      // Wait a bit for messages to come in
-      await Future.delayed(const Duration(seconds: 2));
+      // Wait longer for messages to come in from various relays
+      await Future.delayed(const Duration(seconds: 3));
       
       // Get fresh messages from the service
       final freshMessages = await _dmService.getMessagesForPubkey(widget.profile.pubkey);
       
       if (mounted) {
-        // Check if we have new messages or if message list has changed
-        bool hasNewMessages = freshMessages.length != _messages.length;
+        // Always update messages to ensure we have the latest
+        setState(() {
+          _messages = freshMessages;
+          _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
+        });
         
-        // Also check if the last message ID is different (in case messages were deleted/changed)
-        if (!hasNewMessages && freshMessages.isNotEmpty && _messages.isNotEmpty) {
-          hasNewMessages = freshMessages.last.id != _messages.last.id;
-        }
+        print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
         
-        if (hasNewMessages) {
-          setState(() {
-            _messages = freshMessages;
-            _messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
-          });
+        // Scroll to bottom if we have new messages
+        if (freshMessages.isNotEmpty) {
           _scrollToBottom();
-          print('[ConversationScreen] Refreshed with ${freshMessages.length} messages');
-          
-          // Don't show snackbar here since we're already in the conversation
-          // The notification service will handle snackbars when not in conversation
-        } else {
-          print('[ConversationScreen] No new messages found');
         }
       }
     } catch (e) {
       print('[ConversationScreen] Error refreshing messages: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Error refreshing messages: ${e.toString()}'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     } finally {
       if (mounted) {
         setState(() {
