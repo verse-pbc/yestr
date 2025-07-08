@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
 import 'screens/login_screen.dart';
+import 'screens/test_image_screen.dart';
 import 'widgets/responsive_wrapper.dart';
 import 'widgets/app_initialization_wrapper.dart';
 import 'services/nostr_band_api_service.dart';
@@ -77,6 +78,9 @@ class MyApp extends StatelessWidget {
         );
       },
       home: const AppInitializationWrapper(),
+      routes: {
+        '/test-image': (context) => const TestImageScreen(),
+      },
     );
   }
 }

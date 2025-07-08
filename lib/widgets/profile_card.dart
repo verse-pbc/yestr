@@ -51,6 +51,11 @@ class ProfileCard extends StatelessWidget {
                   // Always use proxy URL for profile pictures
                   final imageUrl = AvatarHelper.getMedium(profile.pubkey);
                   
+                  // Debug logging for u32Luke
+                  if (profile.pubkey == '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a') {
+                    print('[ProfileCard] Loading image for u32Luke: $imageUrl');
+                  }
+                  
                   return CachedNetworkImage(
                     imageUrl: imageUrl,
                     fit: BoxFit.cover,
@@ -73,6 +78,12 @@ class ProfileCard extends StatelessWidget {
                       ),
                     ),
                     errorWidget: (context, url, error) {
+                      // Debug logging for u32Luke
+                      if (profile.pubkey == '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a') {
+                        print('[ProfileCard] Error loading image for u32Luke: $error');
+                        print('[ProfileCard] Failed URL: $url');
+                      }
+                      
                       return Container(
                         color: Colors.grey[300],
                         child: const Icon(

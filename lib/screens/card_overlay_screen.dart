@@ -259,12 +259,12 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
           // Insert special profile at position 10 if we have enough profiles
           if (loadedProfiles.length >= 10) {
             // Insert special profile into the list
-            const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
+            const specialPubkey = '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a'; // u32Luke for debugging
             final specialProfile = NostrProfile(
               pubkey: specialPubkey,
-              name: 'Special Profile',
-              displayName: 'Special Profile',
-              about: 'Loading profile...',
+              name: 'u32Luke',
+              displayName: 'u32Luke',
+              about: 'Mining, markets, and systems design',
               picture: null,
               banner: null,
               nip05: null,
@@ -410,7 +410,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
   }
   
   void _insertSpecialProfile() {
-    const specialPubkey = 'e77b246867ba5172e22c08b6add1c7de1049de997ad2fe6ea0a352131f9a0e9a';
+    const specialPubkey = '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a'; // u32Luke for debugging
     
     // Check if special profile already exists
     if (_profiles.any((p) => p.pubkey == specialPubkey)) {
@@ -422,9 +422,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
     // Create a basic profile with the special pubkey
     final specialProfile = NostrProfile(
       pubkey: specialPubkey,
-      name: 'Special Profile',
-      displayName: 'Special Profile',
-      about: 'Loading profile...',
+      name: 'u32Luke',
+      displayName: 'u32Luke',
+      about: 'Mining, markets, and systems design',
       picture: null,
       banner: null,
       nip05: null,

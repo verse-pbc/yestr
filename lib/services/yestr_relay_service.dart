@@ -87,6 +87,16 @@ class YestrRelayService {
                   );
                   
                   profiles.add(profile);
+                  
+                  // Debug logging for u32Luke
+                  if (pubkey == '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a') {
+                    print('YestrRelayService: [DEBUG] u32Luke profile data:');
+                    print('  - Name: ${profile.name}');
+                    print('  - Display Name: ${profile.displayName}');
+                    print('  - Picture URL: ${profile.picture}');
+                    print('  - About: ${profile.about}');
+                  }
+                  
                   print('YestrRelayService: Added profile ${pubkey.substring(0, 8)}... - ${profile.displayNameOrName}');
                   if (relays != null && relays.isNotEmpty) {
                     print('  - Relays: ${relays.join(", ")}');

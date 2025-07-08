@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_svg/flutter_svg.dart';
 import '../services/key_management_service.dart';
 import '../services/ndk_backup/ndk_service.dart';
@@ -283,6 +284,20 @@ class _LoginScreenState extends State<LoginScreen> {
                   style: TextStyle(fontSize: 16),
                 ),
               ),
+              
+              // Debug button
+              if (kDebugMode) ...[
+                const SizedBox(height: 16),
+                TextButton(
+                  onPressed: () {
+                    Navigator.pushNamed(context, '/test-image');
+                  },
+                  child: const Text(
+                    'Test u32Luke Image',
+                    style: TextStyle(color: Colors.grey),
+                  ),
+                ),
+              ],
             ],
           ),
         ),
