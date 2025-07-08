@@ -90,7 +90,10 @@ class YestrRelayService {
                   
                   // Debug logging for u32Luke
                   if (pubkey == '08bfc00b7f72e015f45c326f486bec16e4d5236b70e44543f1c5e86a8e21c76a') {
-                    print('YestrRelayService: [DEBUG] u32Luke profile data:');
+                    print('YestrRelayService: [DEBUG] u32Luke RAW DATA:');
+                    print('  - Raw metadata: $metadata');
+                    print('  - Picture from metadata: ${metadata['picture']}');
+                    print('YestrRelayService: [DEBUG] u32Luke parsed profile:');
                     print('  - Name: ${profile.name}');
                     print('  - Display Name: ${profile.displayName}');
                     print('  - Picture URL: ${profile.picture}');
