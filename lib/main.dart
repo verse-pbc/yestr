@@ -9,6 +9,7 @@ import 'services/yestr_relay_service.dart';
 import 'services/service_migration_helper.dart';
 import 'services/service_migration_helper_web.dart';
 import 'services/app_initialization_service.dart';
+import 'services/profile_image_preload_service.dart';
 
 void main() async {
   // Ensure Flutter binding is initialized
@@ -33,6 +34,7 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
+      navigatorKey: navigatorKey,
       title: 'Flutter Card Swiper Demo',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(

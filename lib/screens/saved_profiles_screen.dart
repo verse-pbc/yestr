@@ -10,6 +10,7 @@ import '../widgets/profile_card.dart';
 import '../widgets/app_drawer.dart';
 import '../widgets/dm_composer.dart';
 import '../widgets/gradient_background.dart';
+import '../services/profile_image_preload_service.dart';
 
 class SavedProfilesScreen extends StatefulWidget {
   const SavedProfilesScreen({super.key});
@@ -22,6 +23,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
   final CardSwiperController controller = CardSwiperController();
   final NostrService _nostrService = NostrService();
   final FollowService _followService = FollowService();
+  final ProfileImagePreloadService _preloadService = ProfileImagePreloadService();
   late final SavedProfilesService _savedProfilesService;
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
@@ -62,6 +64,11 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
         _isLoading = false;
       });
       
+      // Initialize preload service with saved profiles
+      if (_profiles.isNotEmpty) {
+        _preloadService.initialize(_profiles);
+      }
+      
       print('Loaded ${_profiles.length} saved profiles');
       print('Saved profile pubkeys: ${_savedProfilesService.savedProfilePubkeys}');
       print('Profiles empty: ${_profiles.isEmpty}');
@@ -79,6 +86,7 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
   @override
   void dispose() {
     controller.dispose();
+    _preloadService.dispose();
     // Don't dispose singleton services
     super.dispose();
   }
@@ -387,11 +395,18 @@ class _SavedProfilesScreenState extends State<SavedProfilesScreen> {
     
     final profile = _profiles[previousIndex];
     
-    // Update current index
+    // Update current index and preload service
     if (currentIndex != null) {
       setState(() {
         _currentIndex = currentIndex;
       });
+      _preloadService.updateCurrentIndex(currentIndex);
+      
+      // Log preload stats periodically
+      if (currentIndex % 5 == 0) {
+        final stats = _preloadService.getStats();
+        print('[SavedProfilesScreen] Preload stats: ${stats}');
+      }
     }
     
     String action;

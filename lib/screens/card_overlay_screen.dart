@@ -29,6 +29,7 @@ import '../utils/avatar_helper.dart';
 import '../utils/profile_image_preloader.dart';
 import '../utils/image_cache_warmer.dart';
 import '../services/app_initialization_service.dart';
+import '../services/profile_image_preload_service.dart';
 
 class CardOverlayScreen extends StatefulWidget {
   const CardOverlayScreen({super.key});
@@ -47,9 +48,11 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
   late final SavedProfilesService _savedProfilesService;
   late final DirectMessageService _dmService;
   late final DmNotificationService _notificationService;
+  final ProfileImagePreloadService _preloadService = ProfileImagePreloadService();
   List<NostrProfile> _profiles = [];
   bool _isLoading = true;
   StreamSubscription? _notificationSubscription;
+  int _currentIndex = 0;
 
   @override
   void initState() {
@@ -221,6 +224,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
             _isLoading = false;
           });
           
+          // Initialize preload service with preloaded profiles
+          _preloadService.initialize(_profiles);
+          
           print('\n=== USING PRELOADED PROFILES ===');
           print('Total profiles: ${_profiles.length}');
           print('================================\n');
@@ -259,17 +265,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
           // Don't insert special profile - let it come naturally from Yestr relay
           // which should include the proper picture URL
           
-          // Start preloading images in parallel
-          final preloadFuture = ProfileImagePreloader.preloadProfileImages(
-            context,
-            loadedProfiles.take(10).toList(), // Preload first 10 profiles
-            includeThumbnails: false,
-            includeMedium: true,
-          );
-          
-          // Don't wait for preload to complete, but give it a small head start
-          // This allows images to start loading before UI updates
-          await Future.delayed(const Duration(milliseconds: 100));
+          // Initialize the new preload service with all profiles
+          _preloadService.initialize(loadedProfiles);
           
           // Now update the UI
           if (mounted) {
@@ -279,13 +276,6 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
             });
             apiSuccess = true;
           }
-          
-          // Continue preloading in background
-          preloadFuture.then((_) {
-            print('Profile images preloaded successfully');
-          }).catchError((e) {
-            print('Error preloading images: $e');
-          });
           
           // Request special profile if needed
           if (loadedProfiles.length >= 10) {
@@ -365,14 +355,6 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
         if (mounted && _profiles.isEmpty) {
           final loadedProfiles = List<NostrProfile>.from(profiles);
           
-          // Start preloading images immediately
-          ProfileImagePreloader.preloadProfileImages(
-            context,
-            loadedProfiles.take(10).toList(),
-            includeThumbnails: false,
-            includeMedium: true,
-          );
-          
           setState(() {
             _profiles = loadedProfiles;
             
@@ -381,6 +363,9 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
               _insertSpecialProfile();
             }
           });
+          
+          // Initialize preload service with these profiles
+          _preloadService.initialize(loadedProfiles);
         }
       });
     } catch (e) {
@@ -544,6 +529,7 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
   void dispose() {
     _notificationSubscription?.cancel();
     controller.dispose();
+    _preloadService.dispose();
     // Don't dispose singleton services
     super.dispose();
   }
@@ -860,6 +846,18 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
   ) {
     final profile = _profiles[previousIndex];
     
+    // Update current index for preload service
+    if (currentIndex != null) {
+      _currentIndex = currentIndex;
+      _preloadService.updateCurrentIndex(currentIndex);
+      
+      // Log preload stats periodically
+      if (currentIndex % 5 == 0) {
+        final stats = _preloadService.getStats();
+        print('[CardOverlayScreen] Preload stats: ${stats}');
+      }
+    }
+    
     // Check if we're running low on profiles and fetch more
     if (currentIndex != null && _profiles.length - currentIndex < 10) {
       _loadMoreProfiles();
@@ -921,13 +919,8 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
               _profiles.addAll(uniqueNewProfiles);
             });
             
-            // Preload new profile images
-            ProfileImagePreloader.preloadProfileImages(
-              context,
-              uniqueNewProfiles.take(5).toList(), // Preload next 5 profiles
-              includeThumbnails: false,
-              includeMedium: true,
-            );
+            // Add new profiles to preload service
+            _preloadService.addProfiles(uniqueNewProfiles);
             
             return;
           }
