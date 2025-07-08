@@ -397,16 +397,6 @@ class _CardOverlayScreenState extends State<CardOverlayScreen> with WebNdkInitia
     // Don't insert special profiles anymore - let them come from Yestr relay
     // with proper picture URLs
     return;
-    
-    // Insert at position 9 (10th card, 0-indexed)
-    if (_profiles.length >= 9) {
-      _profiles.insert(9, specialProfile);
-    } else {
-      _profiles.add(specialProfile);
-    }
-    
-    // Request the full profile data
-    _requestSpecificProfile(specialPubkey);
   }
 
   String? _npubToHex(String npub) {
